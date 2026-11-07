@@ -24,6 +24,7 @@ from .geometry import (
     surface_deviation,
     write_3mf,
 )
+from .stages import StageRecorder
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +85,7 @@ def execute_worker(command, log_path, timeout):
                 raise subprocess.CalledProcessError(returncode, command)
 
 
-def run_blender(mesh, settings, blender, workspace):
+def run_blender(mesh, settings, blender, workspace, stages=None):
     source = workspace / "input.npz"
     result = workspace / "repaired.npz"
     metrics = workspace / "repair.json"
@@ -97,6 +98,7 @@ def run_blender(mesh, settings, blender, workspace):
                 "output": str(result),
                 "metrics": str(metrics),
                 "voxel_mm": settings.voxel_mm,
+                "stages_directory": str(stages.directory) if stages else None,
             }
         ),
         encoding="utf-8",
@@ -129,7 +131,7 @@ def run_blender(mesh, settings, blender, workspace):
     return repaired, json.loads(metrics.read_text(encoding="utf-8"))
 
 
-def run_meshlib(mesh, settings, workspace):
+def run_meshlib(mesh, settings, workspace, stages=None):
     source = workspace / "input.ply"
     target = workspace / "repaired.stl"
     metrics = workspace / "repair.json"
@@ -143,6 +145,7 @@ def run_meshlib(mesh, settings, workspace):
                 "metrics": str(metrics),
                 "voxel_mm": settings.voxel_mm,
                 "strip_hidden_faces": settings.strip_hidden_faces,
+                "stages_directory": str(stages.directory) if stages else None,
             }
         ),
         encoding="utf-8",
@@ -161,7 +164,15 @@ def run_meshlib(mesh, settings, workspace):
     return trimesh.load_mesh(target, process=True), json.loads(metrics.read_text(encoding="utf-8"))
 
 
-def prepare_model(source: Path, output: Path, settings: PrintSettings, blender="blender") -> dict:
+def prepare_model(
+    source: Path,
+    output: Path,
+    settings: PrintSettings,
+    blender="blender",
+    stage_directory=None,
+    stage_lock=None,
+    stage_commit=None,
+) -> dict:
     source, output = Path(source).resolve(), Path(output).resolve()
     if not source.is_file():
         raise FileNotFoundError(source)
@@ -171,8 +182,22 @@ def prepare_model(source: Path, output: Path, settings: PrintSettings, blender="
     logger.info("Loaded %s: %d triangles", source.name, len(mesh.faces))
     # Native backends use float32. Normalize in float64 before scaling so a
     # distant scene origin cannot erase millimeter detail during conversion.
-    mesh.apply_translation(-mesh.bounds.mean(axis=0))
-    mesh.apply_scale(settings.size_mm / mesh.extents.max())
+    center = mesh.bounds.mean(axis=0)
+    scale = settings.size_mm / mesh.extents.max()
+    mesh.apply_translation(-center)
+    mesh.apply_scale(scale)
+    stages = (
+        StageRecorder(stage_directory, settings.size_mm, stage_lock, stage_commit)
+        if stage_directory
+        else None
+    )
+    if stages:
+        original = trimesh.load_scene(source, process=False, skip_materials=True).to_mesh()
+        original.apply_translation(-center)
+        original.apply_scale(scale)
+        stages.mesh("raw", original)
+        del original
+        stages.mesh("prepared", mesh)
     grid_cells = math.prod(math.ceil(float(size) / settings.voxel_mm) + 6 for size in mesh.extents)
     if grid_cells > 150_000_000:
         raise ValueError(
@@ -200,20 +225,30 @@ def prepare_model(source: Path, output: Path, settings: PrintSettings, blender="
             removed_before = 0
             if settings.backend == "blender":
                 mesh, removed_before = remove_enclosed_shells(mesh)
+                if stages:
+                    stages.mesh("pre-shells", mesh)
             logger.info(
                 "Removed %d enclosed shells; reconstructing with %s",
                 removed_before,
                 settings.backend,
             )
             reference = mesh.copy()
-            if settings.backend == "meshlib":
-                mesh, repair = run_meshlib(mesh, settings, workspace)
-            else:
-                mesh, repair = run_blender(mesh, settings, blender, workspace)
+            try:
+                if settings.backend == "meshlib":
+                    mesh, repair = run_meshlib(mesh, settings, workspace, stages)
+                else:
+                    mesh, repair = run_blender(mesh, settings, blender, workspace, stages)
+            finally:
+                if stages:
+                    stages.import_snapshots()
             removed_after = 0
             if settings.backend == "blender":
                 mesh, removed_after = remove_enclosed_shells(mesh)
+                if stages:
+                    stages.mesh("no-cavities", mesh)
             repair["faces_reoriented"] = orient_closed_components(mesh)
+            if stages:
+                stages.mesh("oriented", mesh)
             logger.info(
                 "Removed %d enclosed shells in total; measuring surface change",
                 removed_before + removed_after + repair.get("enclosed_shells_removed", 0),
@@ -229,12 +264,17 @@ def prepare_model(source: Path, output: Path, settings: PrintSettings, blender="
             if deviation["sampled_p95_mm"] > settings.voxel_mm * 2:
                 manifest["review_reasons"].append("large_surface_change")
             # Put the model on z=0 without changing its chosen physical size.
-            mesh.apply_translation(
+            print_translation = np.array(
                 [-mesh.bounds.mean(axis=0)[0], -mesh.bounds.mean(axis=0)[1], -mesh.bounds[0, 2]]
             )
+            mesh.apply_translation(print_translation)
             stl = workspace / "model.stl"
             mesh.export(stl)
             exported = trimesh.load_mesh(stl, process=True)
+            if stages:
+                aligned = exported.copy()
+                aligned.apply_translation(-print_translation)
+                stages.mesh("exported", aligned)
             geometry = describe(exported)
             manifest.update(repair=repair, geometry=geometry)
             if not geometry["positive_volume"] or geometry["nonmanifold_edges"]:

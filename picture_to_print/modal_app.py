@@ -98,15 +98,22 @@ gpu_image = (
     gpu="A100-80GB",
     cpu=4,
     memory=32768,
-    volumes={"/cache": weights},
+    volumes={"/cache": weights, "/data": jobs},
     secrets=[runtime_secret],
     timeout=1200,
     scaledown_window=10,
     max_containers=1,
     retries=0,
 )
-def generate_geometry(photo: bytes, resolution: int, seed: int):
+def generate_geometry(
+    photo: bytes,
+    resolution: int,
+    seed: int,
+    include_images: bool = False,
+    job_id: str | None = None,
+):
     import io
+    import re
     import tempfile
 
     import torch
@@ -127,12 +134,37 @@ def generate_geometry(photo: bytes, resolution: int, seed: int):
             "shape_slat_flow_model_512",
         ] + (["shape_slat_flow_model_1024"] if resolution == 1024 else [])
 
+    images = {}
+    recorder = None
+    if job_id is not None:
+        if not re.fullmatch(r"[0-9a-f]{32}", job_id):
+            raise ValueError("Invalid job ID")
+        jobs.reload()
+        folder = Path("/data/jobs") / job_id
+        if not (folder / "job.json").is_file():
+            raise ValueError("Unknown generation job")
+        from picture_to_print.stages import StageRecorder
+
+        recorder = StageRecorder(folder / "stages", size_mm=1, commit=jobs.commit)
+
+    def capture(identifier, value):
+        if include_images:
+            buffer = io.BytesIO()
+            value.save(buffer, format="PNG")
+            if recorder:
+                # Commit as each phase finishes, before sampling can fail or
+                # exhaust GPU memory. Failed jobs still retain their images.
+                recorder.image(identifier, buffer.getvalue())
+            else:
+                images[identifier] = buffer.getvalue()
+
     try:
         image = Image.open(io.BytesIO(photo)).convert("RGBA")
         if image.getchannel("A").getextrema()[0] == 255:
             image = remove(image, session=new_session("u2net"))
         if not image.getchannel("A").getbbox():
             raise ValueError("Background removal found no foreground")
+        capture("foreground", image)
         pipeline = Pipeline.from_pretrained.__func__(ShapeOnlyPipeline, "microsoft/TRELLIS.2-4B")
         config = pipeline._pretrained_args
         for name in ("sparse_structure_sampler", "shape_slat_sampler"):
@@ -149,12 +181,17 @@ def generate_geometry(photo: bytes, resolution: int, seed: int):
         pipeline.cuda()
         torch.manual_seed(seed)
         with torch.inference_mode():
-            mesh = sample_geometry(pipeline, image, resolution)
+            mesh = sample_geometry(
+                pipeline,
+                image,
+                resolution,
+                on_preprocessed=lambda value: capture("generation-input", value),
+            )
         with tempfile.TemporaryDirectory() as directory:
             raw = export_raw_mesh(mesh, Path(directory) / "raw.ply")
             if raw.stat().st_size > 75_000_000:
                 raise ValueError("Raw mesh exceeds transfer limit; use 512 resolution")
-            return raw.read_bytes(), {
+            metadata = {
                 "model": "microsoft/TRELLIS.2-4B",
                 "trellis_commit": TRELLIS_REF,
                 "resolution": resolution,
@@ -162,6 +199,9 @@ def generate_geometry(photo: bytes, resolution: int, seed: int):
                 "textures_generated": False,
                 "background_removal": "u2net",
             }
+            if include_images and not recorder:
+                metadata["images"] = images
+            return raw.read_bytes(), metadata
     finally:
         weights.commit()
 

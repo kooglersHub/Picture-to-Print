@@ -44,7 +44,14 @@ def process_job(job_id: str):
 
     def generator(source, raw, resolution, seed, log):
         function = modal.Function.from_name("picture-to-print", "generate_geometry")
-        data, metadata = function.remote(source.read_bytes(), resolution, seed)
+        try:
+            data, metadata = function.remote(
+                source.read_bytes(), resolution, seed, include_images=True, job_id=job_id
+            )
+        finally:
+            # Import GPU-persisted image stages before any CPU snapshot updates.
+            # Reload must precede writing raw.ply, since reload drops dirty files.
+            jobs.reload()
         raw.write_bytes(data)
         return metadata
 

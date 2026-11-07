@@ -5,8 +5,7 @@
 - Website: https://picture-to-print-karl.timring5002.chatgpt.site/
 - Modal CPU: App `picture-to-print-web`, Funktion `web` und Worker `process_job`.
 - Modal GPU: App `picture-to-print`, Funktion `generate_geometry`, A100 80 GB.
-- Sites-Quellrevision: `9b903bc2320de6e5ef39487c58bc1dffba10576a`.
-- Veröffentlicht: Sites-Version `appgver_556bc55bf6c48191bb899bad771cc992`.
+- Sites-Quellrevision der Zwischenstandsansicht: `c225696e71904a1e93ac54881aa861b1dee8e83d`.
 - Token-Login mit begrenztem Request-Body, HttpOnly-Sitzung, serverseitiger
   Eigentümerprüfung und privatem Backend-Bearer. Keine Geheimnisse im Repository.
 - Die Website erlaubt MeshLib und Blender; Vergleiche verwenden dieselbe Roh-PLY,
@@ -56,6 +55,25 @@
   den Lesehandle offen; gezielte Workflow-/Recovery-Tests bestätigen die Korrektur.
 
 ## Betriebsgrenzen
+
+Neu: Die Website zeichnet Bild- und Reparaturzwischenstände auf und zeigt sie
+mit gemeinsamer Kamera und separaten Downloads. Für den ursprünglichen Dino wurde
+der CPU-only-Nachlauf `5a824cad28eb47bc8a699d689364942b` erfolgreich geprüft:
+Originalfoto und neun Mesh-Phasen einschließlich Rohmesh sind verfügbar; die alte
+Freistellung wurde nicht nachgestellt. Rohmesh-Vorschau mit 20.561.328 Bytes als
+gültiges GLB geladen. Die UI verwendet ein ruhiges helles Layout mit Systemschrift,
+blauem Akzent und Vor-/Zurück-Navigation; ein `apple-design`-Skill war nicht installiert.
+
+Zusätzlich wurde der vollständige Foto-Durchlauf `6c1d13f77fdb4d27a12b704a6118a3bb`
+mit allen zwölf Stufen geprüft. Freistellung und TRELLIS-Zuschnitt waren schon
+während der Generierung abrufbar; alle neun Geometriestufen sind vorhanden.
+Die Rohmesh-Vorschau mit 20.561.724 Bytes wurde als gültiges GLB geladen.
+Der Viewer darf das mitgelieferte WebAssembly kompilieren; JavaScript-eval bleibt
+gesperrt. Eine zusätzliche Prüfung deckt diese getrennten CSP-Berechtigungen ab.
+
+Prüfstand dieser Erweiterung: 53 Python-Tests einschließlich echtem Blender und
+14 JavaScript-Tests (Zugang und Stufennavigation) bestanden. Alle ausgelieferten
+Website-Dateien werden weiterhin bytegenau gegen ihre Quellen geprüft.
 
 - Eine geschlossene Geometrie ist keine automatische Druckfreigabe. Dünne Teile,
   getrennte Fragmente, Motivtreue, Stützen und Slicer-Schichten müssen geprüft werden.

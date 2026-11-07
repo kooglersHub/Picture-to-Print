@@ -5,6 +5,11 @@ let previewUrl = null;
 let allJobs = [];
 let selectedJob = null;
 let capabilities = null;
+let stageData = null;
+let selectedStageId = null;
+let stageRequest = 0;
+let stageLoadingJob = null;
+let cameraJobId = null;
 const toolNames = { meshlib: "MeshLib", blender: "Blender" };
 const labels = {
   queued: "In der Warteschlange",
@@ -91,6 +96,13 @@ $("login-form").addEventListener("submit", async (event) => {
 $("logout").addEventListener("click", async () => {
   await fetch("/auth/logout", { method: "POST" });
   currentJob = null;
+  selectedJob = null;
+  stageRequest++;
+  stageLoadingJob = null;
+  stageData = null;
+  selectedStageId = null;
+  $("viewer").removeAttribute("src");
+  $("stage-image").removeAttribute("src");
   $("history-list").replaceChildren();
   showSession(false);
 });
@@ -157,6 +169,25 @@ function metric(value, label) {
 }
 function renderJob(job) {
   if (selectedJob?.id !== job.id) {
+    stageData = null;
+    selectedStageId = null;
+    cameraJobId = null;
+    stageRequest++;
+    stageLoadingJob = null;
+    $("viewer").hidden = true;
+    $("viewer").removeAttribute("src");
+    $("stage-image").hidden = true;
+    $("stage-image").removeAttribute("src");
+    $("stage-select").replaceChildren();
+    $("stage-select").disabled = true;
+    renderStageNavigation();
+    $("stage-description").textContent = "Zwischenstände werden geladen …";
+    $("stage-metrics").replaceChildren();
+    $("stage-alignment").textContent = "";
+    $("stage-purpose").textContent = "";
+    $("stage-size").textContent = "";
+    $("stage-download").hidden = true;
+    $("stage-backfill").hidden = true;
     const alternate =
       job.settings.backend === "meshlib" ? "blender" : "meshlib";
     $("compare-backend").value =
@@ -183,18 +214,16 @@ function renderJob(job) {
       ),
     );
   const ready = job.status === "ready";
-  $("viewer").hidden = !ready;
   $("downloads").hidden = !ready;
   $("review").hidden = !ready;
+  $("final-metrics-label").hidden = !ready;
+  loadStages(job);
   renderComparison(job);
   $("metrics").replaceChildren();
   $("retry").hidden =
     !job.can_retry_repair ||
     !["ready", "failed", "interrupted"].includes(job.status);
   if (ready) {
-    const source = job.artifacts["preview.glb"];
-    if ($("viewer").getAttribute("src") !== source)
-      $("viewer").setAttribute("src", source);
     $("zip-link").href = job.artifacts["result.zip"];
     $("three-mf-link").href = job.artifacts["model.3mf"];
     $("stl-link").href = job.artifacts["model.stl"];
@@ -219,6 +248,165 @@ function renderJob(job) {
     $("review-text").textContent = text;
   }
 }
+function defaultStageId(stages) {
+  const available = stages.filter((stage) => stage.status === "available");
+  return (
+    available.find((stage) => stage.id === "exported")?.id ||
+    available.find((stage) => stage.id === "raw")?.id ||
+    available.filter((stage) => stage.kind === "mesh").at(-1)?.id ||
+    available[0]?.id ||
+    stages[0]?.id ||
+    null
+  );
+}
+async function loadStages(job) {
+  if (stageLoadingJob === job.id) return;
+  const request = ++stageRequest;
+  stageLoadingJob = job.id;
+  try {
+    const result = await api(`/api/jobs/${job.id}/stages`);
+    if (selectedJob?.id !== job.id || request !== stageRequest) return;
+    stageData = result;
+    if (!result.stages.some((stage) => stage.id === selectedStageId))
+      selectedStageId = defaultStageId(result.stages);
+    $("stage-select").replaceChildren();
+    for (const stage of result.stages) {
+      const option = document.createElement("option");
+      option.value = stage.id;
+      option.textContent =
+        stage.label +
+        (stage.status === "missing" ? " · nicht gespeichert" : "");
+      $("stage-select").append(option);
+    }
+    $("stage-select").value = selectedStageId || "";
+    $("stage-select").disabled = !result.stages.length;
+    $("stage-alignment").textContent = result.alignment || "";
+    $("stage-error").textContent = "";
+    if (cameraJobId !== job.id) {
+      const size =
+        Number(result.size_mm) || Number(job.settings.size_mm) || 100;
+      $("viewer").setAttribute("camera-target", "0m 0m 0m");
+      $("viewer").setAttribute("camera-orbit", `25deg 70deg ${size * 2.4}m`);
+      cameraJobId = job.id;
+    }
+    const missingRepair = result.stages.some(
+      (stage) =>
+        stage.kind === "mesh" &&
+        stage.id !== "raw" &&
+        stage.status === "missing",
+    );
+    $("stage-backfill").hidden =
+      !(result.legacy || missingRepair) || !job.can_retry_repair;
+    $("stage-retry").disabled = !["ready", "failed", "interrupted"].includes(
+      selectedJob.status,
+    );
+    renderStage();
+  } catch (error) {
+    if (selectedJob?.id === job.id && request === stageRequest)
+      $("stage-error").textContent = error.message;
+  } finally {
+    if (request === stageRequest) stageLoadingJob = null;
+  }
+}
+function renderStage() {
+  renderStageNavigation();
+  const stage = stageData?.stages.find((item) => item.id === selectedStageId);
+  const available = stage?.status === "available";
+  const mesh = available && stage.kind === "mesh";
+  $("viewer").hidden = !mesh || !stage.preview_url;
+  $("stage-image").hidden =
+    !available || stage.kind !== "image" || !stage.preview_url;
+  $("stage-description").textContent = stage
+    ? `${stage.label}: ${stage.description || ""}${available ? "" : " Dieser Zwischenstand wurde nicht gespeichert und ist nicht verfügbar."}`
+    : "Noch keine Zwischenstände verfügbar. Fertige Schritte erscheinen hier automatisch.";
+  if (available && stage.preview_url) {
+    const target = mesh ? $("viewer") : $("stage-image");
+    target.setAttribute("alt", stage.label);
+    if (target.getAttribute("src") !== stage.preview_url)
+      target.setAttribute("src", stage.preview_url);
+  }
+  $("stage-download").hidden = !available || !stage.download_url;
+  if (available && stage.download_url)
+    $("stage-download").href = stage.download_url;
+  $("stage-size").textContent =
+    available && stage.bytes
+      ? `${(stage.bytes / 1000000).toLocaleString("de-DE", { maximumFractionDigits: 1 })} MB · Nur der ausgewählte Zwischenstand wird geladen.`
+      : "";
+  $("stage-purpose").textContent = mesh
+    ? stage.id === "exported"
+      ? "Exportierte Druckdatei · Vor dem Druck weiterhin im Slicer prüfen."
+      : "Diagnosegeometrie · Kann offene Flächen und lose Teile enthalten. Keine freigegebene Druckdatei."
+    : "";
+  $("stage-metrics").replaceChildren();
+  const geometry = available && stage.metrics;
+  if (geometry) {
+    for (const [key, label] of [
+      ["vertices", "Punkte"],
+      ["triangles", "Dreiecke"],
+      ["boundary_edges", "offene Kanten"],
+      ["nonmanifold_edges", "nicht-manifold Kanten"],
+      ["components", "getrennte Teile"],
+    ])
+      $("stage-metrics").append(
+        metric(geometry[key]?.toLocaleString("de-DE") ?? "—", label),
+      );
+    $("stage-metrics").append(
+      metric(
+        geometry.watertight == null ? "—" : geometry.watertight ? "Ja" : "Nein",
+        "wasserdicht",
+      ),
+    );
+  }
+}
+function renderStageNavigation() {
+  const stages = stageData?.stages || [];
+  const index = stages.findIndex((stage) => stage.id === selectedStageId);
+  $("stage-previous").disabled = index <= 0;
+  $("stage-next").disabled = index < 0 || index >= stages.length - 1;
+  $("stage-counter").textContent = `${index + 1} / ${stages.length}`;
+}
+function moveStage(direction) {
+  const stages = stageData?.stages || [];
+  const index = stages.findIndex((stage) => stage.id === selectedStageId);
+  const next = index + direction;
+  if (index < 0 || next < 0 || next >= stages.length) return;
+  selectedStageId = stages[next].id;
+  $("stage-select").value = selectedStageId;
+  renderStage();
+}
+$("stage-previous").addEventListener("click", () => moveStage(-1));
+$("stage-next").addEventListener("click", () => moveStage(1));
+$("stage-select").addEventListener("change", () => {
+  selectedStageId = $("stage-select").value;
+  renderStage();
+});
+function repairSettings(job) {
+  const data = new FormData();
+  for (const key of ["size_mm", "voxel_mm", "backend"])
+    data.set(key, job.settings[key]);
+  return data;
+}
+$("stage-retry").addEventListener("click", async () => {
+  if (!selectedJob) return;
+  const original = selectedJob;
+  $("stage-retry").disabled = true;
+  $("stage-error").textContent = "";
+  try {
+    const job = await api(`/api/jobs/${original.id}/retry`, {
+      method: "POST",
+      body: repairSettings(original),
+    });
+    if (selectedJob?.id === original.id) renderJob(job);
+    await refreshJobs();
+  } catch (error) {
+    if (selectedJob?.id === original.id)
+      $("stage-error").textContent = error.message;
+  } finally {
+    $("stage-retry").disabled =
+      !selectedJob ||
+      !["ready", "failed", "interrupted"].includes(selectedJob.status);
+  }
+});
 $("retry").addEventListener("click", async () => {
   if (!currentJob) return;
   $("retry").disabled = true;

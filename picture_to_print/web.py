@@ -198,4 +198,29 @@ def create_app(service, backend_token=None):
             },
         )
 
+    @app.get("/api/jobs/{job_id}/stages")
+    def stages(job_id: str, request: Request):
+        return service.stage_catalog(job_id, request.state.owner)
+
+    @app.get("/api/jobs/{job_id}/stage-files/{name}")
+    def stage_file(job_id: str, name: str, request: Request):
+        with service.lock:
+            file = service.stage_file(job_id, name, request.state.owner)
+            data = file.read_bytes()
+        mime = {
+            ".glb": "model/gltf-binary",
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".webp": "image/webp",
+        }.get(file.suffix, "application/octet-stream")
+        return Response(
+            data,
+            media_type=mime,
+            headers={
+                "Cache-Control": "private, no-store",
+                "Content-Disposition": f'attachment; filename="{file.name}"',
+            },
+        )
+
     return app

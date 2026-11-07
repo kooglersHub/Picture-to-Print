@@ -1,10 +1,12 @@
 """Geometry-only use of the pinned TRELLIS.2 public sampling methods."""
 
 
-def sample_geometry(pipeline, image, resolution):
+def sample_geometry(pipeline, image, resolution, on_preprocessed=None):
     if resolution not in {512, 1024}:
         raise ValueError("Resolution must be 512 or 1024")
     image = pipeline.preprocess_image(image)
+    if on_preprocessed:
+        on_preprocessed(image)
     low_condition = pipeline.get_cond([image], 512)
     coordinates = pipeline.sample_sparse_structure(low_condition, 32, num_samples=1)
     low_model = pipeline.models["shape_slat_flow_model_512"]

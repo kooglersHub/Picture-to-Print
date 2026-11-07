@@ -139,9 +139,23 @@ def test_blender_backend_repairs_open_cube(tmp_path, blender):
         tmp_path / "blender",
         PrintSettings(size_mm=20, voxel_mm=0.5, backend="blender"),
         blender,
+        stage_directory=tmp_path / "blender-stages",
     )
     assert result["status"] == "geometry_ready"
     assert result["geometry"]["positive_volume"]
+    from picture_to_print.stages import read_stages
+
+    assert {
+        "raw",
+        "prepared",
+        "pre-shells",
+        "native-import",
+        "pre-capped",
+        "remeshed",
+        "no-cavities",
+        "oriented",
+        "exported",
+    } <= {stage["id"] for stage in read_stages(tmp_path / "blender-stages")}
 
 
 def test_removes_connected_inner_walls(tmp_path):
