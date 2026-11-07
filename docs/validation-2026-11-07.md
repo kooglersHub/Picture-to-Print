@@ -37,6 +37,13 @@ the largest component holds 96.6% of total volume. Islands are deliberately
 reported and preserved, including separate meaningful parts such as the lantern.
 No automatic largest-component-only filter was used.
 
+A third comparison with MeshLib's visibility stripping disabled reached
+the interior-shell check but exceeded its 300 s native-worker limit. It was
+terminated with its descendants and produced only a rejected manifest, no
+print artifacts. This is a time-limit result, not evidence that the method
+could never repair the asset. The successful visibility-assisted run used
+an explicit 600 s ceiling.
+
 The local exports contain STL, millimeter 3MF and the complete manifest. A
 local shaded before/after comparison was rendered and inspected; source assets
 and derived meshes/images are excluded from Git. The lantern's fine detail

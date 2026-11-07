@@ -38,7 +38,7 @@ existing output directories and child-process failures must be tested.
 - [x] Add CLI, packaging, CI and README with input/output examples, physical
   scaling and shop worker contract; clearly document limitations.
 - [x] Run full suite, CLI help and a damaged-model command end to end.
-- [ ] Commit and push main as requested after verifying the remote state.
+- [x] Commit and push main as requested after verifying the remote state.
 
 ## Execution decisions
 
@@ -51,3 +51,9 @@ existing output directories and child-process failures must be tested.
   ambiguous intersecting shells conservatively.
 - Native repair has a timeout. The host job runner must enforce a total limit
   covering Python loading, analysis and export as documented in the README.
+
+
+## Completion
+
+Merged through PR #1 after successful GitHub CI. Local full suite: 19 passed.
+Reference exports and inspected comparison PNG remain local under exports/.
