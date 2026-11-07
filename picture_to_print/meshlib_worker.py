@@ -8,6 +8,9 @@ import numpy as np
 from meshlib import mrmeshnumpy as mn
 from meshlib import mrmeshpy as mm
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from snapshots import write_native_snapshot
+
 
 def remove_enclosed_shells(mesh, known_disjoint=False):
     regions = list(mm.getAllComponents(mm.MeshPart(mesh)))
@@ -98,20 +101,26 @@ def close_remesh_boundaries(mesh):
 def run(config_path):
     config = json.loads(Path(config_path).read_text(encoding="utf-8"))
     mesh = mm.loadMesh(config["input"])
+    stages = config.get("stages_directory")
+    write_native_snapshot(stages, "native-import", lambda file: mm.saveMesh(mesh, str(file)))
     print("MeshLib: testing face visibility", flush=True)
     hidden, removed_before = strip_hidden_faces(mesh) if config["strip_hidden_faces"] else (0, 0)
+    write_native_snapshot(stages, "visible", lambda file: mm.saveMesh(mesh, str(file)))
     print(f"MeshLib: removed {hidden} hidden faces; reconstructing volume", flush=True)
     params = mm.GeneralOffsetParameters()
     params.voxelSize = config["voxel_mm"]
     params.signDetectionMode = mm.SignDetectionMode.HoleWindingRule
     params.closeHolesInHoleWindingNumber = True
     solid = mm.generalOffsetMesh(mm.MeshPart(mesh), 0.0, params)
+    write_native_snapshot(stages, "remeshed", lambda file: mm.saveMesh(solid, str(file)))
     holes_filled = close_remesh_boundaries(solid)
+    write_native_snapshot(stages, "capped", lambda file: mm.saveMesh(solid, str(file)))
     collisions = mm.findSelfCollidingTriangles(mm.MeshPart(solid))
     print(f"MeshLib: checking interior shells ({len(collisions)} intersections)", flush=True)
     # A single global collision check proves the precondition for the much
     # cheaper non-intersecting containment query across all voxel components.
     removed_after = remove_enclosed_shells(solid, known_disjoint=True) if not len(collisions) else 0
+    write_native_snapshot(stages, "no-cavities", lambda file: mm.saveMesh(solid, str(file)))
     mm.saveMesh(solid, config["output"])
     Path(config["metrics"]).write_text(
         json.dumps(

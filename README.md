@@ -29,6 +29,30 @@ Blender wird im Cloud-CPU-Image installiert. Lokal muss `blender` im PATH liegen
 oder `BLENDER_BIN` auf die ausführbare Datei zeigen. Nicht verfügbare Werkzeuge
 werden in der Website deaktiviert und vor Auftragsannahme serverseitig abgelehnt.
 
+### Alle Zwischenstände ansehen
+
+Im Ergebnisbereich wählst du mit „Zwischenstand ansehen“ oder Vor/Zurück die
+einzelnen Phasen aus: Originalfoto, Freistellung, TRELLIS-Zuschnitt, Rohmesh,
+Vorbereitung, Werkzeug-Import und die jeweiligen Reparaturschritte bis zur STL.
+Jeder gespeicherte Mesh-Schritt hat eine drehbare Vorschau, Geometriewerte und
+einen PLY-Download. Die Ansichten verwenden einen gemeinsamen Maßstab, Ursprung
+und dieselbe Kamera; ein Formverlust wird dadurch nicht durch neues Zentrieren
+verdeckt. Es wird nur der ausgewählte Zwischenstand im Browser geladen.
+
+Diagnosemeshes können offen, fragmentiert oder fehlerhaft sein. Sie sind von den
+geprüften Druckdateien getrennt und bleiben auch bei fehlgeschlagenen Aufträgen
+zugänglich. Originalfoto und Diagnosegeometrie kommen nicht ins normale Druck-ZIP.
+Die Zugriffsprüfung gilt auch für sämtliche Zwischenstände.
+
+Bei älteren Aufträgen erzeugt „Zwischenschritte nachträglich erzeugen“ die
+Reparaturphasen aus dem gespeicherten Rohmesh ohne neuen GPU-Aufruf. Damals nicht
+gespeicherte Freistellungen werden als fehlend angezeigt. Neue Fotoaufträge
+speichern Freistellung und TRELLIS-Eingabebild direkt beim Erzeugen in der Cloud,
+damit sie bei einem späteren Generierungsfehler erhalten bleiben.
+
+Volle Rohmeshes können große Vorschauen und zusätzlichen Speicherplatz benötigen;
+die Diagnoseaufzeichnung vereinfacht die Geometrie nicht.
+
 **Verifiziert:** Ein Foto aus den offiziellen TRELLIS-Beispielen wurde mit echter
 GPU-Inferenz in Rohgeometrie und anschließend in geschlossene STL-/3MF-Dateien
 umgewandelt; der ZIP-Download funktioniert. Der erste Reparaturversuch zeigte

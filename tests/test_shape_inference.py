@@ -36,3 +36,18 @@ class GeometryPipeline:
 def test_shape_generation_outputs_geometry_without_texture_sampling(resolution):
     result = sample_geometry(GeometryPipeline(), "photo", resolution)
     assert result.vertices == [resolution]
+
+
+def test_captures_the_actual_preprocessed_image_passed_to_conditioning():
+    seen = []
+
+    class Pipeline(GeometryPipeline):
+        def preprocess_image(self, image):
+            return "cropped image"
+
+        def get_cond(self, images, resolution):
+            assert images == ["cropped image"]
+            return super().get_cond(images, resolution)
+
+    sample_geometry(Pipeline(), "original", 512, on_preprocessed=seen.append)
+    assert seen == ["cropped image"]

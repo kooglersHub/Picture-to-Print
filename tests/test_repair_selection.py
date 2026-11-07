@@ -60,7 +60,7 @@ def test_worker_passes_blender_path_and_records_elapsed_time(tmp_path, monkeypat
 
     calls = []
 
-    def prepare(source, target, settings, blender):
+    def prepare(source, target, settings, blender, **kwargs):
         calls.append((settings.backend, blender))
         target.mkdir()
         trimesh.creation.box(extents=[2, 4, 6]).export(target / "model.stl")

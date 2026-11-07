@@ -9,6 +9,25 @@ import bpy
 import numpy as np
 from mathutils.bvhtree import BVHTree
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from snapshots import write_native_snapshot
+
+
+def save_snapshot(mesh, directory, stage_id):
+    if not directory:
+        return
+    mesh.calc_loop_triangles()
+    vertices = np.empty((len(mesh.vertices), 3), dtype=np.float32)
+    faces = np.empty((len(mesh.loop_triangles), 3), dtype=np.int32)
+    mesh.vertices.foreach_get("co", vertices.ravel())
+    mesh.loop_triangles.foreach_get("vertices", faces.ravel())
+    write_native_snapshot(
+        directory,
+        stage_id,
+        lambda file: np.savez(file, vertices=vertices, faces=faces),
+        suffix=".npz",
+    )
+
 
 def run(config_path):
     config = json.loads(Path(config_path).read_text(encoding="utf-8"))
@@ -21,6 +40,8 @@ def run(config_path):
     bpy.context.collection.objects.link(obj)
     bpy.context.view_layer.objects.active = obj
     obj.select_set(True)
+    stages = config.get("stages_directory")
+    save_snapshot(mesh, stages, "native-import")
 
     editable = bmesh.new()
     editable.from_mesh(mesh)
@@ -33,6 +54,7 @@ def run(config_path):
     bmesh.ops.recalc_face_normals(editable, faces=list(editable.faces))
     editable.to_mesh(mesh)
     editable.free()
+    save_snapshot(mesh, stages, "pre-capped")
 
     modifier = obj.modifiers.new("solid_volume", "REMESH")
     modifier.mode = "VOXEL"
@@ -40,6 +62,7 @@ def run(config_path):
     modifier.adaptivity = 0
     modifier.use_remove_disconnected = False
     bpy.ops.object.modifier_apply(modifier=modifier.name)
+    save_snapshot(obj.data, stages, "remeshed")
     editable = bmesh.new()
     editable.from_mesh(obj.data)
     bmesh.ops.triangulate(editable, faces=list(editable.faces))

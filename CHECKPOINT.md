@@ -57,6 +57,18 @@
 
 ## Betriebsgrenzen
 
+Neu: Die Website zeichnet Bild- und Reparaturzwischenstände auf und zeigt sie
+mit gemeinsamer Kamera und separaten Downloads. Für den ursprünglichen Dino wurde
+der CPU-only-Nachlauf `5a824cad28eb47bc8a699d689364942b` erfolgreich geprüft:
+Originalfoto und neun Mesh-Phasen einschließlich Rohmesh sind verfügbar; die alte
+Freistellung wurde nicht nachgestellt. Rohmesh-Vorschau mit 20.561.328 Bytes als
+gültiges GLB geladen. Die UI verwendet ein ruhiges helles Layout mit Systemschrift,
+blauem Akzent und Vor-/Zurück-Navigation; ein `apple-design`-Skill war nicht installiert.
+
+Prüfstand dieser Erweiterung: 53 Python-Tests einschließlich echtem Blender und
+13 JavaScript-Tests (Zugang und Stufennavigation) bestanden. Alle ausgelieferten
+Website-Dateien werden weiterhin bytegenau gegen ihre Quellen geprüft.
+
 - Eine geschlossene Geometrie ist keine automatische Druckfreigabe. Dünne Teile,
   getrennte Fragmente, Motivtreue, Stützen und Slicer-Schichten müssen geprüft werden.
 - Keine belastbare allgemeine Rangliste aus einem einzelnen Motiv ableiten.

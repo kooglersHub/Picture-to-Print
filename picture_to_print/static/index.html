@@ -16,16 +16,14 @@
     <header>
       <a class="brand" href="/"
         ><span class="brand-icon">P³</span
-        ><span
-          >Picture to Print<small>FOTOS, DIE FORM ANNEHMEN.</small></span
-        ></a
+        ><span>Picture to Print<small>Dein privates 3D-Atelier</small></span></a
       ><span class="private-badge">● &nbsp; Privater Zugang</span
       ><button class="quiet" id="logout" hidden>Abmelden</button>
     </header>
     <main>
       <section id="login" class="login-card" hidden>
-        <span class="eyebrow">DEIN PRIVATES ATELIER</span>
-        <h1>Ein Foto.<br />Etwas zum Anfassen.</h1>
+        <span class="eyebrow">Dein privates Atelier</span>
+        <h1>Vom Foto<br />zur Figur.</h1>
         <p>
           Hier wird aus deinem Lieblingsmotiv eine eigene 3D-Figur. Öffne deinen
           persönlichen Zugangslink oder gib deinen Token ein.
@@ -50,11 +48,11 @@
       <div id="atelier" hidden>
         <section class="intro">
           <div>
-            <span class="eyebrow">VOM LIEBLINGSFOTO ZUR FIGUR</span>
-            <h1>Mach dein Motiv<br /><em>greifbar.</em></h1>
+            <span class="eyebrow">Picture to Print</span>
+            <h1>Vom Foto zur Figur.</h1>
             <p>
-              Foto hochladen, Größe wählen, Figur erstellen.<br />Die
-              Druckdateien bekommst du direkt hier.
+              Foto hochladen und jeden Schritt ansehen. Vergleiche das Rohmodell
+              mit der Aufbereitung und prüfe die Druckdateien.
             </p>
           </div>
           <div class="process-note">
@@ -62,15 +60,15 @@
             ><span>02 <b>3D-Modell</b></span
             ><span>03 <b>Druckdatei</b></span>
             <p>
-              Ohne Texturen. Mit Geometrieprüfung.<br />Vor dem Drucken prüfst
-              du das Ergebnis im Slicer.
+              Bilder, Geometrie und Messwerte im Vergleich. Vor dem Drucken
+              gehört das Ergebnis in deinen Slicer.
             </p>
           </div>
         </section>
         <div class="workspace">
           <section class="panel input-panel">
             <div class="section-title">
-              <h2>Dein Motiv</h2>
+              <h2>Neuer Auftrag</h2>
               <span class="step">01</span>
             </div>
             <form id="job-form">
@@ -161,7 +159,7 @@
           </section>
           <section class="panel result-panel">
             <div class="section-title">
-              <h2>Deine Figur</h2>
+              <h2>Ergebnis &amp; Zwischenstände</h2>
               <span class="step">02—03</span>
             </div>
             <div id="empty-state" class="empty-state">
@@ -184,15 +182,73 @@
                 <li data-stage="ready">Dateien bereit</li>
               </ol>
               <p id="job-message" aria-live="polite"></p>
-              <model-viewer
-                id="viewer"
-                camera-controls
-                touch-action="pan-y"
-                auto-rotate
-                shadow-intensity="1"
-                alt="Drehbare Vorschau deiner Figur"
-                hidden
-              ></model-viewer>
+              <section
+                id="stage-panel"
+                class="stage-panel"
+                aria-labelledby="stage-heading"
+              >
+                <h4 id="stage-heading">Schritt für Schritt vergleichen</h4>
+                <label for="stage-select">Zwischenstand ansehen</label>
+                <div class="stage-controls">
+                  <button
+                    type="button"
+                    id="stage-previous"
+                    class="stage-arrow"
+                    aria-label="Vorheriger Zwischenstand"
+                    disabled
+                  >
+                    ‹
+                  </button>
+                  <select id="stage-select" disabled></select>
+                  <button
+                    type="button"
+                    id="stage-next"
+                    class="stage-arrow"
+                    aria-label="Nächster Zwischenstand"
+                    disabled
+                  >
+                    ›
+                  </button>
+                </div>
+                <p id="stage-counter" class="stage-counter" aria-live="polite">
+                  0 / 0
+                </p>
+                <p id="stage-description"></p>
+                <p id="stage-alignment" class="stage-note"></p>
+                <p id="stage-error" role="alert"></p>
+                <img id="stage-image" class="stage-image" alt="" hidden />
+                <model-viewer
+                  id="viewer"
+                  camera-controls
+                  touch-action="pan-y"
+                  shadow-intensity="1"
+                  alt="Drehbare Vorschau deiner Figur"
+                  hidden
+                ></model-viewer>
+                <p id="stage-purpose" class="stage-note"></p>
+                <div id="stage-metrics" class="metrics"></div>
+                <div class="stage-download-row">
+                  <a id="stage-download" class="secondary" download hidden
+                    >Zwischenstand herunterladen ↓</a
+                  >
+                  <span id="stage-size" class="stage-note"></span>
+                </div>
+                <div id="stage-backfill" hidden>
+                  <p class="stage-note">
+                    Reparaturzwischenstände aus der gespeicherten Rohgeometrie
+                    nachträglich erzeugen. Gleiche Größe, Auflösung und gleiches
+                    Werkzeug; nur CPU-Rechenzeit, keine neue TRELLIS-Erzeugung.
+                    Damals nicht gespeicherte Freistellungen und Eingabebilder
+                    lassen sich dadurch nicht wiederherstellen.
+                  </p>
+                  <button class="secondary" id="stage-retry">
+                    Zwischenschritte nachträglich erzeugen
+                  </button>
+                </div>
+              </section>
+              <p id="final-metrics-label" class="stage-note" hidden>
+                Prüfwerte der fertigen Druckdatei
+              </p>
               <div id="metrics" class="metrics"></div>
               <div id="review" class="review" hidden>
                 <strong>Ein letzter Blick vor dem Druck.</strong>

@@ -19,6 +19,7 @@ from uuid import uuid4
 import trimesh
 
 from .pipeline import PrintSettings, prepare_model
+from .stages import IMAGE_IDS, IMAGE_SUFFIXES, STEPS, StageRecorder, read_stages
 
 ARTIFACTS = {"model.stl", "model.3mf", "manifest.json", "preview.glb", "result.zip"}
 TERMINAL = {"ready", "failed", "interrupted"}
@@ -66,6 +67,105 @@ class JobService:
             "meshlib": importlib.util.find_spec("meshlib") is not None,
             "blender": shutil.which(self.blender) is not None,
         }
+
+    def stage_catalog(self, job_id, owner=None):
+        with self.lock:
+            job = self.get(job_id, owner)
+            folder = self.folder(job_id)
+            captured = {row["id"]: row for row in read_stages(folder / "stages")}
+            photo = (
+                Path(job["input_file"]).suffix in IMAGE_SUFFIXES
+                or bool(job.get("generation"))
+                or "input" in captured
+            )
+            relevant = set(STEPS)
+            if not photo:
+                relevant -= IMAGE_IDS
+            relevant -= (
+                {"pre-shells", "pre-capped"}
+                if job["settings"]["backend"] == "meshlib"
+                else {"visible", "capped"}
+            )
+            rows = []
+            for identifier, (label, description) in STEPS.items():
+                if identifier not in relevant:
+                    continue
+                row = {
+                    "id": identifier,
+                    "label": label,
+                    "description": description,
+                    "kind": "image" if identifier in IMAGE_IDS else "mesh",
+                    "status": "missing",
+                    "preview_url": None,
+                    "download_url": None,
+                    "metrics": None,
+                    "bytes": 0,
+                }
+                if identifier in captured:
+                    saved = captured[identifier]
+                    row.update(
+                        {key: value for key, value in saved.items() if not key.endswith("_file")}
+                    )
+                    row["preview_url"] = f"/api/jobs/{job_id}/stage-files/{saved['preview_file']}"
+                    row["download_url"] = f"/api/jobs/{job_id}/stage-files/{saved['download_file']}"
+                elif identifier == "input" and Path(job["input_file"]).suffix in IMAGE_SUFFIXES:
+                    file = folder / job["input_file"]
+                    row.update(
+                        status="available",
+                        bytes=file.stat().st_size,
+                        preview_url=f"/api/jobs/{job_id}/stage-files/input-original{file.suffix}",
+                        download_url=f"/api/jobs/{job_id}/stage-files/input-original{file.suffix}",
+                    )
+                elif (
+                    identifier == "raw"
+                    and job.get("can_retry_repair")
+                    and (folder / "raw.ply").is_file()
+                ):
+                    row.update(
+                        status="available",
+                        bytes=(folder / "raw.ply").stat().st_size,
+                        download_url=f"/api/jobs/{job_id}/stage-files/raw-original.ply",
+                        description=description
+                        + " Für diesen älteren Auftrag fehlt die Vorschau; sie kann nachträglich erzeugt werden.",
+                    )
+                elif identifier == "exported" and job["status"] == "ready":
+                    row.update(
+                        status="available",
+                        metrics=job.get("geometry"),
+                        preview_url=f"/api/jobs/{job_id}/files/preview.glb",
+                        download_url=f"/api/jobs/{job_id}/files/model.stl",
+                    )
+                rows.append(row)
+            return {
+                "stages": rows,
+                "size_mm": job["settings"]["size_mm"],
+                "alignment": "Alle neu aufgezeichneten 3D-Stufen verwenden dieselbe Zielgröße, Ausrichtung und Kameraposition. Diagnosegeometrie ist keine Druckfreigabe.",
+                "legacy": "prepared" not in captured,
+            }
+
+    def stage_file(self, job_id, filename, owner=None):
+        with self.lock:
+            job = self.get(job_id, owner)
+            folder = self.folder(job_id)
+            suffix = Path(job["input_file"]).suffix
+            if filename == "input-original" + suffix and suffix in IMAGE_SUFFIXES:
+                file = folder / job["input_file"]
+            elif filename == "raw-original.ply":
+                if not job.get("can_retry_repair"):
+                    raise KeyError("Raw mesh is not complete")
+                file = folder / "raw.ply"
+            else:
+                allowed = {
+                    row[key]
+                    for row in read_stages(folder / "stages")
+                    for key in ("preview_file", "download_file")
+                }
+                if filename not in allowed or Path(filename).name != filename:
+                    raise KeyError("Unknown stage")
+                file = folder / "stages" / filename
+            if not file.is_file():
+                raise KeyError("Unknown stage")
+            return file
 
     def __exit__(self, *args):
         if self.executor:
@@ -192,6 +292,20 @@ class JobService:
                 job["generation"] = original.get("generation")
                 with (folder / "raw.ply").open("rb") as stream:
                     job["raw_sha256"] = hashlib.file_digest(stream, "sha256").hexdigest()
+            recorder = StageRecorder(folder / "stages", settings.size_mm, self.lock)
+            if suffix in IMAGE_SUFFIXES:
+                recorder.image("input", data, suffix)
+            if retry_from:
+                previous = self.folder(retry_from)
+                for entry in read_stages(previous / "stages"):
+                    if entry["id"] in IMAGE_IDS:
+                        file = previous / "stages" / entry["download_file"]
+                        recorder.image(entry["id"], file.read_bytes(), file.suffix)
+                old_photo = previous / original["input_file"]
+                if old_photo.suffix in IMAGE_SUFFIXES and not any(
+                    row["id"] == "input" for row in read_stages(folder / "stages")
+                ):
+                    recorder.image("input", old_photo.read_bytes(), old_photo.suffix)
             self._save(job)
             if self.dispatcher:
                 try:
@@ -235,6 +349,9 @@ class JobService:
             return
         folder = self.folder(job_id)
         raw = folder / "raw.ply"
+        recorder = StageRecorder(
+            folder / "stages", job["settings"]["size_mm"], self.lock, self.commit
+        )
         try:
             if not raw.exists():
                 source = folder / job["input_file"]
@@ -245,6 +362,8 @@ class JobService:
                     metadata = self.generator(
                         source, raw, job["resolution"], job["seed"], folder / "generation.log"
                     )
+                    for identifier, data in metadata.pop("images", {}).items():
+                        recorder.image(identifier, data)
                     self._update(job_id, generation=metadata, can_retry_repair=True)
                 else:
                     mesh = trimesh.load_scene(source, skip_materials=True).to_mesh()
@@ -257,7 +376,13 @@ class JobService:
             self._update(job_id, raw_sha256=raw_sha256)
             started = time.perf_counter()
             result = prepare_model(
-                raw, folder / "print", PrintSettings(**job["settings"]), blender=self.blender
+                raw,
+                folder / "print",
+                PrintSettings(**job["settings"]),
+                blender=self.blender,
+                stage_directory=recorder.directory,
+                stage_lock=self.lock,
+                stage_commit=self.commit,
             )
             repair_seconds = time.perf_counter() - started
             mesh = trimesh.load_mesh(folder / "print/model.stl")
