@@ -6,3 +6,6 @@ __pycache__/
 exports/
 build/
 dist/
+site/
+jobs/
+.env

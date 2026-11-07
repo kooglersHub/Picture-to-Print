@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      name="description"
+      content="Vom Lieblingsfoto zur eigenen 3D-Figur. Privater Foto-zu-Druck-Workflow."
+    />
+    <title>Picture to Print — Deine Figur</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script type="module" src="/vendor/model-viewer.min.js"></script>
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="/"
+        ><span class="brand-icon">P³</span
+        ><span
+          >Picture to Print<small>FOTOS, DIE FORM ANNEHMEN.</small></span
+        ></a
+      ><span class="private-badge">● &nbsp; Privater Zugang</span
+      ><button class="quiet" id="logout" hidden>Abmelden</button>
+    </header>
+    <main>
+      <section id="login" class="login-card" hidden>
+        <span class="eyebrow">DEIN PRIVATES ATELIER</span>
+        <h1>Ein Foto.<br />Etwas zum Anfassen.</h1>
+        <p>
+          Hier wird aus deinem Lieblingsmotiv eine eigene 3D-Figur. Öffne deinen
+          persönlichen Zugangslink oder gib deinen Token ein.
+        </p>
+        <form id="login-form">
+          <label for="token">Zugangstoken</label
+          ><input
+            id="token"
+            type="password"
+            autocomplete="off"
+            placeholder="Deinen Token einfügen"
+            required
+          /><button class="primary" type="submit">
+            Atelier öffnen <span>↗</span>
+          </button>
+        </form>
+        <p id="login-error" role="alert"></p>
+        <small
+          >Wer deinen Token kennt, kann auf deine Aufträge zugreifen.</small
+        >
+      </section>
+      <div id="atelier" hidden>
+        <section class="intro">
+          <div>
+            <span class="eyebrow">VOM LIEBLINGSFOTO ZUR FIGUR</span>
+            <h1>Mach dein Motiv<br /><em>greifbar.</em></h1>
+            <p>
+              Foto hochladen, Größe wählen, Figur erstellen.<br />Die
+              Druckdateien bekommst du direkt hier.
+            </p>
+          </div>
+          <div class="process-note">
+            <span>01 <b>Foto</b></span
+            ><span>02 <b>3D-Modell</b></span
+            ><span>03 <b>Druckdatei</b></span>
+            <p>
+              Ohne Texturen. Mit Geometrieprüfung.<br />Vor dem Drucken prüfst
+              du das Ergebnis im Slicer.
+            </p>
+          </div>
+        </section>
+        <div class="workspace">
+          <section class="panel input-panel">
+            <div class="section-title">
+              <h2>Dein Motiv</h2>
+              <span class="step">01</span>
+            </div>
+            <form id="job-form">
+              <label class="dropzone" id="dropzone" for="file"
+                ><input
+                  id="file"
+                  name="file"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,.glb,.stl,.ply,.obj"
+                  required
+                /><img
+                  id="photo-preview"
+                  alt="Dein ausgewähltes Foto"
+                  hidden
+                /><span id="drop-copy"
+                  ><span class="upload-icon">↥</span
+                  ><strong>Foto hier ablegen</strong
+                  ><span>oder eine Datei auswählen</span
+                  ><small
+                    >PNG, JPG, WebP · bis 25 MB<br />Auch GLB-, STL-, OBJ- und
+                    PLY-Modelle</small
+                  ></span
+                ></label
+              >
+              <p class="file-name" id="file-name"></p>
+              <p class="tip">
+                <strong>Für eine schöne Figur:</strong> Zeige das ganze Motiv
+                mit gut sichtbaren Beinen, Ohren und Schwanz. Die verdeckte
+                Rückseite wird ergänzt.
+              </p>
+              <div class="field-row">
+                <label
+                  >Größe der Figur<select name="size_mm" id="size">
+                    <option value="60">6 cm · klein</option>
+                    <option value="100" selected>10 cm · klassisch</option>
+                    <option value="150">15 cm · groß</option></select
+                  ><small>Gemessen an der längsten Seite.</small></label
+                ><label
+                  >Detailgrad<select name="resolution">
+                    <option value="512" selected>
+                      Standard · erster Versuch
+                    </option>
+                    <option value="1024">Fein · mehr Details</option></select
+                  ><small>Fein benötigt mehr Rechenzeit.</small></label
+                >
+              </div>
+              <label class="tool-field"
+                >Reparaturwerkzeug<select name="backend" id="backend">
+                  <option value="meshlib">MeshLib · Standard</option>
+                  <option value="blender">
+                    Blender · Voxel-Remesh
+                  </option></select
+                ><small
+                  >Du kannst anschließend dasselbe Rohmodell mit dem anderen
+                  Werkzeug vergleichen.</small
+                ></label
+              >
+              <details>
+                <summary>Druckaufbereitung anpassen</summary>
+                <label
+                  >Auflösung der Reparatur<select name="voxel_mm" id="voxel">
+                    <option value="0.4">0,4 mm · Standard</option>
+                    <option value="0.2">0,2 mm · fein, bis 10 cm</option>
+                  </select></label
+                ><label
+                  >Seed<input
+                    type="number"
+                    min="0"
+                    max="2147483647"
+                    name="seed"
+                    value="42"
+                /></label>
+                <p>
+                  Für kleine Details feiner wählen. Größe und Auflösung müssen
+                  in das Speicherlimit passen.
+                </p>
+              </details>
+              <button class="primary create" type="submit" id="create">
+                Figur erstellen <span>↗</span>
+              </button>
+              <p class="cost-note">
+                Fotos werden mit deinem Modal-Konto in der Cloud verarbeitet.
+                Dabei entstehen Rechenkosten. Vorhandene 3D-Modelle überspringen
+                die Bildgenerierung.
+              </p>
+              <p id="form-error" role="alert"></p>
+            </form>
+          </section>
+          <section class="panel result-panel">
+            <div class="section-title">
+              <h2>Deine Figur</h2>
+              <span class="step">02—03</span>
+            </div>
+            <div id="empty-state" class="empty-state">
+              <div class="wire-cube"><span></span></div>
+              <h3>Hier nimmt dein Motiv Form an.</h3>
+              <p>
+                Nach dem Start siehst du hier den Fortschritt.<br />Dein
+                fertiges Modell kannst du drehen und herunterladen.
+              </p>
+            </div>
+            <div id="job-state" hidden>
+              <div class="job-heading">
+                <h3 id="job-name"></h3>
+                <span class="status-badge" id="status"></span>
+              </div>
+              <ol class="timeline">
+                <li data-stage="queued">Auftrag angenommen</li>
+                <li data-stage="generating">3D-Geometrie erzeugen</li>
+                <li data-stage="repairing">Druckaufbereitung &amp; Prüfung</li>
+                <li data-stage="ready">Dateien bereit</li>
+              </ol>
+              <p id="job-message" aria-live="polite"></p>
+              <model-viewer
+                id="viewer"
+                camera-controls
+                touch-action="pan-y"
+                auto-rotate
+                shadow-intensity="1"
+                alt="Drehbare Vorschau deiner Figur"
+                hidden
+              ></model-viewer>
+              <div id="metrics" class="metrics"></div>
+              <div id="review" class="review" hidden>
+                <strong>Ein letzter Blick vor dem Druck.</strong>
+                <p id="review-text"></p>
+              </div>
+              <div id="downloads" class="downloads" hidden>
+                <a class="primary" id="zip-link"
+                  >Alles herunterladen <span>↓</span></a
+                >
+                <div>
+                  <a id="three-mf-link">3MF</a><a id="stl-link">STL</a
+                  ><a id="report-link">Prüfbericht</a>
+                </div>
+              </div>
+              <button class="secondary" id="retry" hidden>
+                Nur Druckaufbereitung wiederholen
+              </button>
+            </div>
+          </section>
+        </div>
+        <section class="comparison panel" id="comparison" hidden>
+          <div class="section-title">
+            <h2>Reparaturen vergleichen</h2>
+            <span class="step">GLEICHES ROHMODELL</span>
+          </div>
+          <p id="comparison-settings"></p>
+          <p>
+            Vergleiche die Vorschauen und die Messwerte. Eine kleine
+            Oberflächenabweichung allein garantiert keine gute Druckbarkeit.
+            Alte Aufträge ohne gespeicherten Rohmodell-Hash erscheinen nach
+            einer erneuten Aufbereitung.
+          </p>
+          <div class="compare-controls">
+            <label for="compare-backend">Weiterer Reparaturlauf</label
+            ><select id="compare-backend">
+              <option value="meshlib">MeshLib</option>
+              <option value="blender">Blender</option></select
+            ><button class="secondary" id="compare-start">
+              Mit diesem Werkzeug vergleichen
+            </button>
+          </div>
+          <p class="cost-note">
+            Verwendet die gespeicherte Geometrie, Größe und Auflösung des
+            ausgewählten Auftrags. Keine neue TRELLIS-Erzeugung; nur
+            CPU-Rechenzeit.
+          </p>
+          <p id="compare-error" role="alert"></p>
+          <div class="table-scroll">
+            <table>
+              <caption class="sr-only">
+                Ergebnisse für dieselbe Rohgeometrie, Größe und Voxelauflösung
+              </caption>
+              <thead>
+                <tr>
+                  <th>Werkzeug</th>
+                  <th>Status</th>
+                  <th>Zeit</th>
+                  <th>Offene Kanten</th>
+                  <th>Teile</th>
+                  <th>Abweichung P95</th>
+                  <th>Vorschau</th>
+                </tr>
+              </thead>
+              <tbody id="comparison-rows"></tbody>
+            </table>
+          </div>
+        </section>
+        <section class="history">
+          <div class="section-title">
+            <h2>Deine bisherigen Aufträge</h2>
+            <span id="connection" role="status">Verbindung wird geprüft …</span>
+          </div>
+          <div id="history-list"></div>
+        </section>
+      </div>
+    </main>
+    <footer>
+      <span>Picture to Print</span>
+      <p>
+        Eine geschlossene Geometrie ist der Anfang. Slicer-Vorschau, Wandstärken
+        und Stützen gehören zur Druckvorbereitung.
+      </p>
+      <span>DEIN MOTIV. DEINE FIGUR.</span>
+    </footer>
+  </body>
+</html>

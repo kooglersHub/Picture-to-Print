@@ -6,6 +6,7 @@ from pathlib import Path
 
 import numpy as np
 import trimesh
+from rtree import index as spatial
 
 
 def load_geometry(source: Path) -> trimesh.Trimesh:
@@ -27,15 +28,22 @@ def load_geometry(source: Path) -> trimesh.Trimesh:
 def remove_enclosed_shells(mesh: trimesh.Trimesh) -> tuple[trimesh.Trimesh, int]:
     parts = list(mesh.split(only_watertight=False, repair=False))
     bounds = np.array([part.bounds for part in parts])
+    properties = spatial.Property(dimension=3)
+    containers = spatial.Index(properties=properties)
+    for index, part in enumerate(parts):
+        if part.is_watertight:
+            containers.insert(index, bounds[index].ravel())
     removed = set()
     for index, part in enumerate(parts):
-        candidates = np.flatnonzero(
-            (bounds[index, 0] > bounds[:, 0]).all(axis=1)
-            & (bounds[index, 1] < bounds[:, 1]).all(axis=1)
-        )
+        # Raw TRELLIS meshes can contain >100,000 disconnected patches. A
+        # spatial index avoids quadratic scans across all component boxes.
+        candidates = containers.intersection(bounds[index].ravel())
         for other_index in candidates:
             container = parts[other_index]
-            if index == other_index or not container.is_watertight:
+            if index == other_index or not (
+                (bounds[index, 0] > bounds[other_index, 0]).all()
+                and (bounds[index, 1] < bounds[other_index, 1]).all()
+            ):
                 continue
             # Vertex containment is insufficient for concave containers. This
             # Blender-only path conservatively retains any possible surface
@@ -56,6 +64,12 @@ def remove_enclosed_shells(mesh: trimesh.Trimesh) -> tuple[trimesh.Trimesh, int]
                 break
     remaining = [part for index, part in enumerate(parts) if index not in removed]
     return trimesh.util.concatenate(remaining), len(removed)
+
+
+def orient_closed_components(mesh: trimesh.Trimesh) -> int:
+    original = mesh.faces.copy()
+    mesh.fix_normals(multibody=True)
+    return int(np.count_nonzero(np.any(original != mesh.faces, axis=1)))
 
 
 def surface_deviation(reference: trimesh.Trimesh, repaired: trimesh.Trimesh) -> dict:

@@ -4,6 +4,8 @@ import json
 import sys
 from pathlib import Path
 
+import numpy as np
+from meshlib import mrmeshnumpy as mn
 from meshlib import mrmeshpy as mm
 
 
@@ -38,7 +40,7 @@ def remove_enclosed_shells(mesh, known_disjoint=False):
     return len(remove)
 
 
-def strip_hidden_faces(mesh):
+def strip_hidden_faces(mesh, batch_size=65536):
     """Sample visibility, independent of face normals and mesh connectivity."""
     directions = [
         mm.Vector3f(x, y, z).normalized()
@@ -48,24 +50,49 @@ def strip_hidden_faces(mesh):
         if (x, y, z) != (0, 0, 0)
     ]
     epsilon = mesh.computeBoundingBox().diagonal() * 1e-6
-    hidden = mm.FaceBitSet()
+    # Pack first so the compact numpy triangle indices match FaceIds even if
+    # the input topology contains deleted faces. No geometry is simplified.
+    mesh.packOptimally()
+    faces = mn.getNumpyFaces(mesh.topology)
+    vertices = mn.getNumpyVerts(mesh)
+    centers = vertices[faces].mean(axis=1).astype(np.float32)
+    hidden_mask = np.ones(len(faces), dtype=bool)
     part = mm.MeshPart(mesh)
-    for face in mesh.topology.getValidFaces():
-        a, b, c = mesh.getTriPoints(face)
-        center = (a + b + c) / 3
-        visible = any(
-            not mm.rayMeshIntersect(
-                part, mm.Line3f(center, direction), rayStart=epsilon, closestIntersect=False
+    for start in range(0, len(faces), batch_size):
+        pending = np.arange(start, min(start + batch_size, len(faces)))
+        for direction in directions:
+            if not len(pending):
+                break
+            origins = mn.fromNumpyArray(centers[pending])
+            vectors = mn.fromNumpyArray(
+                np.tile([direction.x, direction.y, direction.z], (len(pending), 1)).astype(
+                    np.float32
+                )
             )
-            for direction in directions
-        )
-        if not visible:
-            hidden.autoResizeSet(face)
+            result = mm.MultiRayMeshIntersectResult()
+            result.intersectingRays = mm.BitSet()
+            mm.multiRayMeshIntersect(
+                part, origins, vectors, result, rayStart=epsilon, closestIntersect=False
+            )
+            blocked = mn.getNumpyBitSet(result.intersectingRays)
+            hidden_mask[pending[~blocked]] = False
+            pending = pending[blocked]
+    hidden = mn.faceBitSetFromBools(hidden_mask)
     count = hidden.count()
     enclosed = sum(region.is_subset_of(hidden) for region in mm.getAllComponents(part))
     if count:
         mesh.deleteFaces(hidden)
     return count, enclosed
+
+
+def close_remesh_boundaries(mesh):
+    # Hole-aware sign assignment can still leave open boundary loops in a
+    # pathological reconstruction. These are surface defects, not valid tunnels.
+    holes = mesh.topology.findHoleRepresentiveEdges()
+    count = len(holes)
+    if count:
+        mm.fillHoles(mesh, holes)
+    return count
 
 
 def run(config_path):
@@ -79,6 +106,7 @@ def run(config_path):
     params.signDetectionMode = mm.SignDetectionMode.HoleWindingRule
     params.closeHolesInHoleWindingNumber = True
     solid = mm.generalOffsetMesh(mm.MeshPart(mesh), 0.0, params)
+    holes_filled = close_remesh_boundaries(solid)
     collisions = mm.findSelfCollidingTriangles(mm.MeshPart(solid))
     print(f"MeshLib: checking interior shells ({len(collisions)} intersections)", flush=True)
     # A single global collision check proves the precondition for the much
@@ -92,6 +120,7 @@ def run(config_path):
                 "self_intersections_after_remesh": len(collisions),
                 "method": "HoleWindingRule",
                 "enclosed_shells_removed": removed_before + removed_after,
+                "post_remesh_holes_filled": holes_filled,
             }
         ),
         encoding="utf-8",

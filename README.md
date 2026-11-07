@@ -1,5 +1,71 @@
 # Picture to Print
 
+## Website und Foto-Workflow
+
+Die [Website](https://picture-to-print-karl.timring5002.chatgpt.site/) ist veröffentlicht.
+Der persönliche Zugangslink enthält einen Token im URL-Fragment. Die Website
+tauscht ihn gegen ein sicheres HttpOnly-Cookie und entfernt ihn aus der Adresszeile.
+Wer den Token besitzt, kann die zugehörigen Aufträge und Dateien sehen.
+Token und Cloud-Zugangsdaten gehören nicht ins Repository.
+
+Der Ablauf ist: Foto hochladen, längste Ausdehnung und Auflösung wählen,
+TRELLIS-Geometrie erzeugen, Oberfläche aufbereiten, Vorschau prüfen und
+STL/3MF samt Prüfbericht herunterladen. Vorhandene Meshes überspringen die GPU.
+Eine erneute Druckaufbereitung nutzt die gespeicherte Rohgeometrie ohne neue
+Bildgenerierung. Texturen werden weder erzeugt noch benötigt.
+
+### Reparaturwerkzeuge vergleichen
+
+Im Formular wählst du **MeshLib** oder **Blender**. Unter dem Ergebnis erzeugt
+„Mit diesem Werkzeug vergleichen“ einen weiteren Reparaturauftrag mit derselben
+Rohgeometrie, Größe und Voxelauflösung. TRELLIS wird dabei nicht erneut ausgeführt.
+Die Tabelle zeigt Werkzeug, Reparaturzeit, offene Kanten, getrennte Teile und
+die beidseitig gemessene Oberflächenabweichung P95. Über „Ansehen“ wechselst du
+zwischen den Vorschauen und Downloads. Eine geringe Abweichung oder null offene
+Kanten ersetzen die Prüfung auf zu dünne Teile, lose Fragmente und nötige Stützen
+nicht. Vergleiche in der Tabelle sind auf die letzten 50 Aufträge begrenzt.
+
+Blender wird im Cloud-CPU-Image installiert. Lokal muss `blender` im PATH liegen
+oder `BLENDER_BIN` auf die ausführbare Datei zeigen. Nicht verfügbare Werkzeuge
+werden in der Website deaktiviert und vor Auftragsannahme serverseitig abgelehnt.
+
+**Verifiziert:** Ein Foto aus den offiziellen TRELLIS-Beispielen wurde mit echter
+GPU-Inferenz in Rohgeometrie und anschließend in geschlossene STL-/3MF-Dateien
+umgewandelt; der ZIP-Download funktioniert. Der erste Reparaturversuch zeigte
+einen Engpass und Restöffnungen, die anhand desselben gespeicherten Rohmodells
+behoben und erneut geprüft wurden. Auch beide Reparaturwerkzeuge sind mit einem
+echten Cloud-STL-Auftrag bis zum Download getestet. Viele getrennte Teile und
+starke Oberflächenänderungen bleiben ausdrücklich prüfpflichtig; dies ist keine
+automatische Druckfreigabe. Ein Foto des Hundes wurde noch nicht getestet.
+
+Die öffentlichen Website-Dateien und der Token-Proxy liegen im separat verwalteten
+Sites-Quellrepository (`site/` im lokalen Checkout). Die kanonische Oberfläche liegt
+hier unter `picture_to_print/static/`; `site/scripts/sync-ui.mjs` synchronisiert sie.
+Modal trennt den CPU-Webdienst (`picture_to_print.modal_backend`) vom GPU-Dienst
+(`picture_to_print.modal_app`). Aufträge liegen im Volume `picture-to-print-jobs`.
+Ein privater Backend-Bearer und eine serverseitige Auftragseigentümerkennung
+schützen die Verbindung zwischen Website und Modal.
+
+Backend installieren, prüfen und bereitstellen:
+
+```powershell
+python -m pip install -e ".[meshlib,web,dev]"
+python -m pytest -q
+python -m ruff check .
+python -m ruff format --check .
+python -m modal deploy -m picture_to_print.modal_app
+python -m modal deploy -m picture_to_print.modal_backend
+```
+
+Modal muss im eigenen Konto angemeldet sein. Das Secret
+`picture-to-print-runtime` muss `P2P_BACKEND_TOKEN` enthalten. Sites benötigt
+`ACCESS_TOKEN_HASH` (SHA-256), `SESSION_SECRET`, `BACKEND_TOKEN` und `BACKEND_URL`.
+Die vorhandene Konfiguration verwendet das Gewichte-Volume
+`darkfantasy-trellis2-weights`. Modell- und MeshLib-Lizenzen müssen zum geplanten
+kommerziellen Einsatz passen.
+
+Aktueller Prüfstand und Betriebsgrenzen: [CHECKPOINT.md](CHECKPOINT.md).
+
 Trellis-Geometrie zu geschlossenen, texturfreien Volumenkörpern auf einem
 CPU-Worker. Der bevorzugte Reparaturpfad verwendet MeshLibs `HoleWindingRule`,
 eine Sichtbarkeitsprüfung und eine erneute Prüfung der exportierten STL.
