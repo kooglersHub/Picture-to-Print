@@ -1,5 +1,52 @@
 # Picture to Print
 
+## Website und Foto-Workflow – Zwischenstand 7. November 2026
+
+Die [Website](https://picture-to-print-karl.timring5002.chatgpt.site/) ist veröffentlicht.
+Der persönliche Zugangslink enthält einen Token im URL-Fragment. Die Website
+tauscht ihn gegen ein sicheres HttpOnly-Cookie und entfernt ihn aus der Adresszeile.
+Wer den Token besitzt, kann die zugehörigen Aufträge und Dateien sehen.
+Token und Cloud-Zugangsdaten gehören nicht ins Repository.
+
+Der Ablauf ist: Foto hochladen, längste Ausdehnung und Auflösung wählen,
+TRELLIS-Geometrie erzeugen, Oberfläche aufbereiten, Vorschau prüfen und
+STL/3MF samt Prüfbericht herunterladen. Vorhandene Meshes überspringen die GPU.
+Eine erneute Druckaufbereitung nutzt die gespeicherte Rohgeometrie ohne neue
+Bildgenerierung. Texturen werden weder erzeugt noch benötigt.
+
+**Verifiziert:** Ein echter Cloud-Auftrag mit einem STL-Testmodell lief bis zum
+ZIP-Download durch. Der GPU-Container wurde erfolgreich gebaut und bereitgestellt.
+Der vollständige Foto-Durchlauf mit echter GPU-Inferenz ist noch nicht geprüft.
+Das ist ein Entwicklungszwischenstand und keine automatische Druckfreigabe.
+
+Die öffentlichen Website-Dateien und der Token-Proxy liegen im separat verwalteten
+Sites-Quellrepository (`site/` im lokalen Checkout). Die kanonische Oberfläche liegt
+hier unter `picture_to_print/static/`; `site/scripts/sync-ui.mjs` synchronisiert sie.
+Modal trennt den CPU-Webdienst (`picture_to_print.modal_backend`) vom GPU-Dienst
+(`picture_to_print.modal_app`). Aufträge liegen im Volume `picture-to-print-jobs`.
+Ein privater Backend-Bearer und eine serverseitige Auftragseigentümerkennung
+schützen die Verbindung zwischen Website und Modal.
+
+Backend installieren, prüfen und bereitstellen:
+
+```powershell
+python -m pip install -e ".[meshlib,web,dev]"
+python -m pytest -q
+python -m ruff check .
+python -m ruff format --check .
+python -m modal deploy -m picture_to_print.modal_app
+python -m modal deploy -m picture_to_print.modal_backend
+```
+
+Modal muss im eigenen Konto angemeldet sein. Das Secret
+`picture-to-print-runtime` muss `P2P_BACKEND_TOKEN` enthalten. Sites benötigt
+`ACCESS_TOKEN_HASH` (SHA-256), `SESSION_SECRET`, `BACKEND_TOKEN` und `BACKEND_URL`.
+Die vorhandene Konfiguration verwendet das Gewichte-Volume
+`darkfantasy-trellis2-weights`. Modell- und MeshLib-Lizenzen müssen zum geplanten
+kommerziellen Einsatz passen.
+
+Offene Schritte und Wiederaufnahme: [CHECKPOINT.md](CHECKPOINT.md).
+
 Trellis-Geometrie zu geschlossenen, texturfreien Volumenkörpern auf einem
 CPU-Worker. Der bevorzugte Reparaturpfad verwendet MeshLibs `HoleWindingRule`,
 eine Sichtbarkeitsprüfung und eine erneute Prüfung der exportierten STL.
