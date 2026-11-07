@@ -63,7 +63,7 @@ def test_worker_passes_blender_path_and_records_elapsed_time(tmp_path, monkeypat
     def prepare(source, target, settings, blender):
         calls.append((settings.backend, blender))
         target.mkdir()
-        trimesh.creation.box().export(target / "model.stl")
+        trimesh.creation.box(extents=[2, 4, 6]).export(target / "model.stl")
         (target / "model.3mf").write_bytes(b"export")
         (target / "manifest.json").write_text(json.dumps({"backend": settings.backend}))
         return {"geometry": {}, "review_reasons": [], "surface_deviation": {}}
@@ -81,3 +81,8 @@ def test_worker_passes_blender_path_and_records_elapsed_time(tmp_path, monkeypat
         assert calls == [("blender", "/custom/blender")]
         assert result["repair_seconds"] >= 0
         assert len(result["raw_sha256"]) == 64
+        print_mesh = trimesh.load_mesh(service.folder(job["id"]) / "print/model.stl")
+        preview = trimesh.load_scene(service.folder(job["id"]) / "print/preview.glb").to_mesh()
+        assert print_mesh.extents.tolist() == [2, 4, 6]
+        assert preview.extents.tolist() == [2, 6, 4]
+        assert preview.visual.vertex_colors[0, :3].max() < 200

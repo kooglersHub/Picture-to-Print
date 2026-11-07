@@ -5,8 +5,8 @@
 - Website: https://picture-to-print-karl.timring5002.chatgpt.site/
 - Modal CPU: App `picture-to-print-web`, Funktion `web` und Worker `process_job`.
 - Modal GPU: App `picture-to-print`, Funktion `generate_geometry`, A100 80 GB.
-- Sites-Quellrevision: `21d1c8594081cf8ce624807fe8d87c684112d516`.
-- Veröffentlicht: Sites-Version `appgver_3680eb6832ac8191b628487c42a5c8e5`.
+- Sites-Quellrevision: `9b903bc2320de6e5ef39487c58bc1dffba10576a`.
+- Veröffentlicht: Sites-Version `appgver_556bc55bf6c48191bb899bad771cc992`.
 - Token-Login mit begrenztem Request-Body, HttpOnly-Sitzung, serverseitiger
   Eigentümerprüfung und privatem Backend-Bearer. Keine Geheimnisse im Repository.
 - Die Website erlaubt MeshLib und Blender; Vergleiche verwenden dieselbe Roh-PLY,
@@ -39,6 +39,17 @@
   ausdrücklich Sichtprüfung und gegebenenfalls manuelle Nacharbeit.
 - Der Blender-Pfad verwendet für die Einschlussprüfung einen räumlichen Index
   statt quadratischer Paarvergleiche bei über 100.000 Eingabefragmenten.
+- Der große Blender-Vergleich `e972d2d28cac491bbcada3e4e016876f` überschritt
+  dennoch das native 600-Sekunden-Limit. MeshLib bleibt die Voreinstellung;
+  Blender ist eine geprüfte Alternative für einfachere Modelle, kein garantierter
+  erfolgreicher Ersatz für dieses sehr komplexe Motiv.
+- Die Website-Bündelung erhält nun JavaScript-Inhalte wörtlich: Ein Dollarzeichen
+  im Viewer wurde zuvor als Ersetzungsanweisung interpretiert. Die Artefaktprüfung
+  vergleicht jetzt alle tatsächlich ausgelieferten Dateien exakt mit ihrer Quelle.
+- Vorschau-GLB verwendet Y-up und eine kontrastreiche Farbe ohne Textur; die
+  Druckgeometrie bleibt in Z-up. Regressionstest prüft beide Ausdehnungen separat.
+  Cloud-Auftrag `552352acaa45419e959985308e31dc31` bestätigt dies mit erneut
+  gültiger Geometrie, 81,599 s Reparaturzeit und 4.383.171 Bytes ZIP-Download.
 
 ## Betriebsgrenzen
 

@@ -3,6 +3,7 @@
 import hashlib
 import importlib.util
 import json
+import math
 import os
 import re
 import shutil
@@ -252,8 +253,11 @@ class JobService:
             )
             repair_seconds = time.perf_counter() - started
             mesh = trimesh.load_mesh(folder / "print/model.stl")
-            # Center the preview only; print units and placement stay unchanged.
+            # glTF viewers use Y-up; print geometry uses Z-up. Keep this pose
+            # and a contrasting, texture-free display color in the preview only.
             mesh.apply_translation(-mesh.bounds.mean(axis=0))
+            mesh.apply_transform(trimesh.transformations.rotation_matrix(-math.pi / 2, [1, 0, 0]))
+            mesh.visual.face_colors = [104, 122, 111, 255]
             mesh.export(folder / "print/preview.glb")
             instructions = (
                 "Die Geometrieprüfungen wurden bestanden. Vor dem Druck Slicer-Schichten, "
