@@ -18,7 +18,7 @@
 
 ## Nachweise
 
-- Python-Suite: 45 Tests bestanden, einschließlich echtem lokalem Blender.
+- Python-Suite einschließlich echtem lokalem Blender geprüft.
 - Ruff und Formatprüfung bestanden; Sites-Zugang: 6 Tests bestanden;
   ESM-Artefakt gebaut und geprüft. Unabhängiges Code-Review ohne wichtige Befunde.
 - Cloud-STL-Vergleich: MeshLib `db57685140c8413c873f643b31b364a4`
@@ -50,6 +50,10 @@
   Druckgeometrie bleibt in Z-up. Regressionstest prüft beide Ausdehnungen separat.
   Cloud-Auftrag `552352acaa45419e959985308e31dc31` bestätigt dies mit erneut
   gültiger Geometrie, 81,599 s Reparaturzeit und 4.383.171 Bytes ZIP-Download.
+- Ein später Windows-Durchlauf reproduzierte eine Dateihandle-Race bei direkten
+  Statuslesern parallel zum atomaren Ersetzen von `job.json`. Lesen und Schreiben
+  verwenden jetzt dieselbe reentrante Sperre. Eine Regression hält absichtlich
+  den Lesehandle offen; gezielte Workflow-/Recovery-Tests bestätigen die Korrektur.
 
 ## Betriebsgrenzen
 

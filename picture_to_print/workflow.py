@@ -84,6 +84,13 @@ class JobService:
         return job
 
     def get(self, job_id, owner=None):
+        # Windows cannot atomically replace a file while another local thread
+        # holds a read handle without delete sharing. Keep reads and writes in
+        # the same critical section, including direct non-HTTP service callers.
+        with self.lock:
+            return self._get(job_id, owner)
+
+    def _get(self, job_id, owner):
         job = self._read_job(job_id)
         if owner is not None and job.get("owner", "local") != owner:
             raise KeyError("Unknown job")
@@ -136,11 +143,12 @@ class JobService:
         )[:50]
 
     def _save(self, job):
-        target = self.folder(job["id"]) / "job.json"
-        temporary = target.with_suffix(".tmp")
-        temporary.write_text(json.dumps(job, indent=2, allow_nan=False), encoding="utf-8")
-        temporary.replace(target)
-        self.commit()
+        with self.lock:
+            target = self.folder(job["id"]) / "job.json"
+            temporary = target.with_suffix(".tmp")
+            temporary.write_text(json.dumps(job, indent=2, allow_nan=False), encoding="utf-8")
+            temporary.replace(target)
+            self.commit()
 
     def _update(self, job_id, **values):
         with self.lock:
