@@ -1,44 +1,56 @@
-# Entwicklungszwischenstand – 7. November 2026
+# Projektstand – 7. November 2026
 
-Auf ausdrücklichen Wunsch des Nutzers endet die Arbeit an diesem Zwischenstand.
-
-## Bereitgestellt
+## Website und Cloud
 
 - Website: https://picture-to-print-karl.timring5002.chatgpt.site/
-- Modal CPU: App `picture-to-print-web`, Funktion `web`.
+- Modal CPU: App `picture-to-print-web`, Funktion `web` und Worker `process_job`.
 - Modal GPU: App `picture-to-print`, Funktion `generate_geometry`, A100 80 GB.
-- Der GPU-Build ist fertig; es wurde noch kein echter Fotoauftrag ausgeführt.
-- Realer Cloud-STL-Test: `8e048b4600e64fe69c7a7c845c9f33db`, Status ready,
-  ZIP-Download mit 273257 Bytes erfolgreich.
-- Sites-Version: `appgver_1151878ce91481918a6f5f16d146a1db`;
-  separate Quellrevision `49e8c67544d6700bb232e74b3d64c4ed5830fb9d`.
-- Token-Login mit begrenztem Request-Body; serverseitige Eigentümerprüfung;
-  gespeicherte Modal-Aufruf-ID zur Erkennung abgebrochener Cloud-Aufträge.
+- Sites-Quellrevision: `21d1c8594081cf8ce624807fe8d87c684112d516`.
+- Veröffentlicht: Sites-Version `appgver_3680eb6832ac8191b628487c42a5c8e5`.
+- Token-Login mit begrenztem Request-Body, HttpOnly-Sitzung, serverseitiger
+  Eigentümerprüfung und privatem Backend-Bearer. Keine Geheimnisse im Repository.
+- Die Website erlaubt MeshLib und Blender; Vergleiche verwenden dieselbe Roh-PLY,
+  physische Größe und Voxelauflösung ohne erneuten GPU-Aufruf.
+- Die vorher doppelt bereitgestellten CPU-Funktionen in `modal_app.py` sind entfernt.
+- Abgebrochene Modal-Aufträge werden anhand der gespeicherten Aufruf-ID erkannt.
+  Verlorene IDs haben eine begrenzte Wartezeit; verspätete Worker starten einen
+  bereits beendeten Auftrag nicht erneut.
 
-## Nächste Schritte
+## Nachweise
 
-Prüfstand vor dem Sichern: Python-Suite 34 bestanden, 1 übersprungen;
-Ruff-Prüfung und Formatprüfung bestanden; Sites-Authentifizierung 6 Tests
-bestanden. Die übersprungene Prüfung gehört zum optionalen Blender-Pfad.
+- Python-Suite: 45 Tests bestanden, einschließlich echtem lokalem Blender.
+- Ruff und Formatprüfung bestanden; Sites-Zugang: 6 Tests bestanden;
+  ESM-Artefakt gebaut und geprüft. Unabhängiges Code-Review ohne wichtige Befunde.
+- Cloud-STL-Vergleich: MeshLib `db57685140c8413c873f643b31b364a4`
+  (1,119 s), Blender `27e8443a2f61470f9545240fdc3472ed` (2,864 s).
+  Beide mit identischem Rohmodell-Hash, null offenen Kanten und validem ZIP.
+- Foto: offizielles TRELLIS-Beispiel `assets/example_image/T.png`.
+  Echte GPU-Erzeugung `6c37e6f0d5944df8bcd58c6699c67f16`, 512, Seed 42,
+  keine Texturen; Rohmesh mit 3.132.422 Dreiecken.
+- Der erste Reparaturversuch überschritt beim Python-Ray-Loop 600 Sekunden.
+  Gebündelte native Ray-Abfragen beheben diesen Engpass. Weitere Diagnose:
+  drei Restöffnungen bereits im nativen Remesh, kein STL-Exportfehler.
+  Diese werden vor Kollisionsprüfung geschlossen; Teilkörper werden nach außen
+  orientiert. Echte Durchgänge bleiben erhalten, wie der Torus-Test bestätigt.
+- Erneute MeshLib-Aufbereitung ohne weitere GPU-Erzeugung:
+  `801f215fd0004fa19eb033d38ddfa7b6`, 79,886 s, null offene/nicht-manifold
+  Kanten, alle Teilkörper mit positivem Volumen, ZIP mit 4.378.856 Bytes.
+  583 Teile und P95-Oberflächenabweichung 4,890 mm bei 60 mm Länge erfordern
+  ausdrücklich Sichtprüfung und gegebenenfalls manuelle Nacharbeit.
+- Der Blender-Pfad verwendet für die Einschlussprüfung einen räumlichen Index
+  statt quadratischer Paarvergleiche bei über 100.000 Eingabefragmenten.
 
-1. Einen echten Fotoauftrag mit 512er Auflösung starten, Status, Roh-PLY,
-   texturfreie Vorschau und STL/3MF-Download bis zum Ende prüfen.
-   Das offizielle TRELLIS-Beispielfoto liegt lokal unter `.tools/trellis-example.png`
-   im übergeordneten Workspace. Ein Hundefoto wurde noch nicht geliefert.
-2. Crash-Lücke zwischen Auftragsspeicherung und Speicherung der Modal-Aufruf-ID
-   behandeln: Ohne `dispatch.json` kann ein Cloud-Auftrag hängenbleiben.
-   Geeignete Altersgrenzen und Schutz vor verspätet startenden Workern testen.
-3. Doppelte ältere CPU-Funktionen `run_job` und `web` aus `modal_app.py`
-   entfernen; produktiver CPU-Einstieg ist bereits `modal_backend.py`.
-4. Tokenrotation mit stabiler Eigentümerkennung planen: Aktuell ist die Kennung
-   der Token-Hash; ein anderer Token blendet die alten Aufträge aus.
-5. Unabhängiges Review der Recovery-Korrekturen und GPU-Ergebnisse abschließen.
-6. Erst nach dem echten Foto-End-to-End-Test die Funktion als vollständig geprüft
-   bezeichnen und den Entwicklungs-PR integrieren.
+## Betriebsgrenzen
 
-Keine geheimen Token in dieses Dokument eintragen. Modal-Zugang liegt im
-Benutzerprofil; Sites- und Modal-Secrets sind bereits im Cloud-Konto eingerichtet.
-Ein tokenbesitzender Besucher kann kostenpflichtige GPU-Aufträge starten;
-maximal drei aktive Aufträge pro Eigentümer, kein automatischer GPU-Retry.
-Vor einem Shopbetrieb fehlen unter anderem kundenbezogene Zugänge, Abrechnung
-und verbindliche Prüfung der tatsächlichen Druckbarkeit.
+- Eine geschlossene Geometrie ist keine automatische Druckfreigabe. Dünne Teile,
+  getrennte Fragmente, Motivtreue, Stützen und Slicer-Schichten müssen geprüft werden.
+- Keine belastbare allgemeine Rangliste aus einem einzelnen Motiv ableiten.
+- Ein tokenbesitzender Besucher kann kostenpflichtige GPU-Aufträge starten.
+  Maximal drei aktive Aufträge pro Eigentümer; kein automatischer GPU-Retry.
+- Vergleich und Verlauf zeigen die letzten 50 Aufträge.
+- Tokenrotation ändert derzeit die Eigentümerkennung und blendet alte Aufträge aus.
+- Vor einem Shopbetrieb fehlen kundenbezogene Zugänge, Abrechnung und eine
+  verbindliche Prüfung der tatsächlichen Druckbarkeit. MeshLib- und Modelllizenzen
+  müssen zum kommerziellen Einsatz passen.
+- Ein Hundefoto wurde noch nicht geliefert. Beispielmedien und Testexporte liegen
+  lokal unter `.tools/` im übergeordneten Workspace und sind nicht eingecheckt.

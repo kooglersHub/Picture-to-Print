@@ -9,7 +9,7 @@ jobs:
         with:
           python-version: '3.11'
       - run: sudo apt-get update
-      - run: sudo apt-get install -y blender
+      - run: sudo apt-get install -y blender python3-numpy
       - run: python -m pip install '.[meshlib,web,dev]'
       - run: ruff check .
       - run: ruff format --check .

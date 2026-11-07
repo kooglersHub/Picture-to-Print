@@ -1,6 +1,6 @@
 # Picture to Print
 
-## Website und Foto-Workflow – Zwischenstand 7. November 2026
+## Website und Foto-Workflow
 
 Die [Website](https://picture-to-print-karl.timring5002.chatgpt.site/) ist veröffentlicht.
 Der persönliche Zugangslink enthält einen Token im URL-Fragment. Die Website
@@ -29,10 +29,14 @@ Blender wird im Cloud-CPU-Image installiert. Lokal muss `blender` im PATH liegen
 oder `BLENDER_BIN` auf die ausführbare Datei zeigen. Nicht verfügbare Werkzeuge
 werden in der Website deaktiviert und vor Auftragsannahme serverseitig abgelehnt.
 
-**Verifiziert:** Ein echter Cloud-Auftrag mit einem STL-Testmodell lief bis zum
-ZIP-Download durch. Der GPU-Container wurde erfolgreich gebaut und bereitgestellt.
-Der vollständige Foto-Durchlauf mit echter GPU-Inferenz ist noch nicht geprüft.
-Das ist ein Entwicklungszwischenstand und keine automatische Druckfreigabe.
+**Verifiziert:** Ein Foto aus den offiziellen TRELLIS-Beispielen wurde mit echter
+GPU-Inferenz in Rohgeometrie und anschließend in geschlossene STL-/3MF-Dateien
+umgewandelt; der ZIP-Download funktioniert. Der erste Reparaturversuch zeigte
+einen Engpass und Restöffnungen, die anhand desselben gespeicherten Rohmodells
+behoben und erneut geprüft wurden. Auch beide Reparaturwerkzeuge sind mit einem
+echten Cloud-STL-Auftrag bis zum Download getestet. Viele getrennte Teile und
+starke Oberflächenänderungen bleiben ausdrücklich prüfpflichtig; dies ist keine
+automatische Druckfreigabe. Ein Foto des Hundes wurde noch nicht getestet.
 
 Die öffentlichen Website-Dateien und der Token-Proxy liegen im separat verwalteten
 Sites-Quellrepository (`site/` im lokalen Checkout). Die kanonische Oberfläche liegt
@@ -60,7 +64,7 @@ Die vorhandene Konfiguration verwendet das Gewichte-Volume
 `darkfantasy-trellis2-weights`. Modell- und MeshLib-Lizenzen müssen zum geplanten
 kommerziellen Einsatz passen.
 
-Offene Schritte und Wiederaufnahme: [CHECKPOINT.md](CHECKPOINT.md).
+Aktueller Prüfstand und Betriebsgrenzen: [CHECKPOINT.md](CHECKPOINT.md).
 
 Trellis-Geometrie zu geschlossenen, texturfreien Volumenkörpern auf einem
 CPU-Worker. Der bevorzugte Reparaturpfad verwendet MeshLibs `HoleWindingRule`,
