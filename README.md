@@ -14,6 +14,21 @@ STL/3MF samt Prüfbericht herunterladen. Vorhandene Meshes überspringen die GPU
 Eine erneute Druckaufbereitung nutzt die gespeicherte Rohgeometrie ohne neue
 Bildgenerierung. Texturen werden weder erzeugt noch benötigt.
 
+### Reparaturwerkzeuge vergleichen
+
+Im Formular wählst du **MeshLib** oder **Blender**. Unter dem Ergebnis erzeugt
+„Mit diesem Werkzeug vergleichen“ einen weiteren Reparaturauftrag mit derselben
+Rohgeometrie, Größe und Voxelauflösung. TRELLIS wird dabei nicht erneut ausgeführt.
+Die Tabelle zeigt Werkzeug, Reparaturzeit, offene Kanten, getrennte Teile und
+die beidseitig gemessene Oberflächenabweichung P95. Über „Ansehen“ wechselst du
+zwischen den Vorschauen und Downloads. Eine geringe Abweichung oder null offene
+Kanten ersetzen die Prüfung auf zu dünne Teile, lose Fragmente und nötige Stützen
+nicht. Vergleiche in der Tabelle sind auf die letzten 50 Aufträge begrenzt.
+
+Blender wird im Cloud-CPU-Image installiert. Lokal muss `blender` im PATH liegen
+oder `BLENDER_BIN` auf die ausführbare Datei zeigen. Nicht verfügbare Werkzeuge
+werden in der Website deaktiviert und vor Auftragsannahme serverseitig abgelehnt.
+
 **Verifiziert:** Ein echter Cloud-Auftrag mit einem STL-Testmodell lief bis zum
 ZIP-Download durch. Der GPU-Container wurde erfolgreich gebaut und bereitgestellt.
 Der vollständige Foto-Durchlauf mit echter GPU-Inferenz ist noch nicht geprüft.

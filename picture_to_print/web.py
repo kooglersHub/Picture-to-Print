@@ -75,25 +75,35 @@ def create_app(service, backend_token=None):
 
     @app.get("/api/health")
     def health():
-        return {"ready": True, "generation": service.readiness(), "review_required": True}
+        return {
+            "ready": True,
+            "generation": service.readiness(),
+            "repair_tools": service.repair_tools(),
+            "review_required": True,
+        }
 
     @app.get("/api/jobs")
     def jobs(request: Request):
         with service.lock:
             return service.list(request.state.owner)
 
-    def settings(size_mm, voxel_mm):
+    def settings(size_mm, voxel_mm, backend):
         try:
-            value = PrintSettings(size_mm=size_mm, voxel_mm=voxel_mm, timeout_seconds=600)
+            value = PrintSettings(
+                size_mm=size_mm, voxel_mm=voxel_mm, timeout_seconds=600, backend=backend
+            )
             if not 10 <= size_mm <= 500 or not 0.05 <= voxel_mm <= 2:
                 raise ValueError("Größe oder Auflösung außerhalb des erlaubten Bereichs")
             if (math.ceil(size_mm / voxel_mm) + 6) ** 3 > 150_000_000:
                 raise ValueError(
                     "Diese Kombination braucht zu viel Speicher. Gröbere Auflösung wählen."
                 )
-            return value
         except ValueError as error:
             raise HTTPException(422, str(error)) from error
+
+        if not service.repair_tools().get(backend):
+            raise HTTPException(412, "Das gewählte Reparaturwerkzeug ist nicht verfügbar")
+        return value
 
     @app.post("/api/jobs", status_code=202)
     async def submit(
@@ -103,8 +113,9 @@ def create_app(service, backend_token=None):
         voxel_mm: float = Form(0.4),
         resolution: int = Form(512),
         seed: int = Form(42),
+        backend: str = Form("meshlib"),
     ):
-        options = settings(size_mm, voxel_mm)
+        options = settings(size_mm, voxel_mm, backend)
         if resolution not in {512, 1024} or not 0 <= seed < 2**31:
             raise HTTPException(422, "Ungültige Generierungseinstellungen")
         suffix = Path(file.filename or "").suffix.lower()
@@ -149,9 +160,13 @@ def create_app(service, backend_token=None):
 
     @app.post("/api/jobs/{job_id}/retry", status_code=202)
     def retry(
-        job_id: str, request: Request, size_mm: float = Form(100), voxel_mm: float = Form(0.4)
+        job_id: str,
+        request: Request,
+        size_mm: float = Form(100),
+        voxel_mm: float = Form(0.4),
+        backend: str = Form("meshlib"),
     ):
-        options = settings(size_mm, voxel_mm)
+        options = settings(size_mm, voxel_mm, backend)
         with service.lock:
             try:
                 return service.retry(job_id, options, request.state.owner)

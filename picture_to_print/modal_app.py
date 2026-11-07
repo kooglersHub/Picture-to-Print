@@ -1,6 +1,5 @@
 """Deploy the private HTTP backend and durable print jobs with Modal."""
 
-import os
 from pathlib import Path
 
 import modal
@@ -15,6 +14,7 @@ runtime_secret = modal.Secret.from_name("picture-to-print-runtime")
 
 cpu_image = (
     modal.Image.debian_slim(python_version="3.11")
+    .apt_install("blender")
     .pip_install(
         "numpy>=1.26,<3",
         "trimesh==5.2.0",
@@ -164,62 +164,6 @@ def generate_geometry(photo: bytes, resolution: int, seed: int):
             }
     finally:
         weights.commit()
-
-
-@app.function(
-    image=cpu_image,
-    volumes={"/data": jobs},
-    timeout=3600,
-    cpu=4,
-    memory=16384,
-    max_containers=1,
-    retries=0,
-)
-def run_job(job_id: str):
-    from picture_to_print.workflow import JobService
-
-    jobs.reload()
-
-    def generator(source, raw, resolution, seed, log):
-        data, metadata = generate_geometry.remote(source.read_bytes(), resolution, seed)
-        raw.write_bytes(data)
-        return metadata
-
-    service = JobService(
-        "/data/jobs",
-        generator=generator,
-        dispatcher=lambda _: None,
-        commit=jobs.commit,
-        recover=False,
-    )
-    service.run_one(job_id)
-
-
-@app.function(
-    image=cpu_image,
-    volumes={"/data": jobs},
-    secrets=[runtime_secret],
-    cpu=1,
-    memory=2048,
-    timeout=300,
-    max_containers=1,
-    scaledown_window=60,
-)
-@modal.concurrent(max_inputs=8)
-@modal.asgi_app()
-def web():
-    from picture_to_print.web import create_app
-    from picture_to_print.workflow import JobService
-
-    service = JobService(
-        "/data/jobs",
-        dispatcher=lambda identifier: run_job.spawn(identifier),
-        readiness=lambda: {"modal": True, "hf": bool(os.environ.get("HF_TOKEN"))},
-        refresh=jobs.reload,
-        commit=jobs.commit,
-        recover=False,
-    )
-    return create_app(service, backend_token=os.environ["P2P_BACKEND_TOKEN"])
 
 
 @app.local_entrypoint()

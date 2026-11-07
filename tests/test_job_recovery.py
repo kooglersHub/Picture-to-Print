@@ -1,3 +1,4 @@
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 from picture_to_print.pipeline import PrintSettings
@@ -34,3 +35,29 @@ def test_completed_call_rereads_final_job_before_marking_interrupted(tmp_path):
         job = service.submit("cube.stl", b"data", PrintSettings(size_mm=20, voxel_mm=0.5))
         job_id = job["id"]
         assert service.get(job_id)["status"] == "ready"
+
+
+def test_stale_queued_job_without_call_id_is_released_and_cannot_start(tmp_path):
+    with JobService(
+        tmp_path, dispatcher=lambda _: None, call_status=lambda _: "running", recover=False
+    ) as service:
+        job = service.submit("cube.stl", b"data", PrintSettings())
+        job["created_at"] = (datetime.now(UTC) - timedelta(minutes=11)).isoformat()
+        service._save(job)
+        assert service.get(job["id"])["status"] == "interrupted"
+        service.run_one(job["id"])
+        assert service.get(job["id"])["status"] == "interrupted"
+        assert not (service.folder(job["id"]) / "raw.ply").exists()
+
+
+def test_no_call_id_does_not_interrupt_a_fresh_or_running_job(tmp_path):
+    with JobService(
+        tmp_path, dispatcher=lambda _: None, call_status=lambda _: "unknown", recover=False
+    ) as service:
+        job = service.submit("cube.stl", b"data", PrintSettings())
+        assert service.get(job["id"])["status"] == "queued"
+        job["created_at"] = (datetime.now(UTC) - timedelta(minutes=11)).isoformat()
+        job["updated_at"] = datetime.now(UTC).isoformat()
+        job["status"] = "generating"
+        service._save(job)
+        assert service.get(job["id"])["status"] == "generating"

@@ -1,9 +1,12 @@
 """Persistent jobs shared by local execution and the Modal job dispatcher."""
 
 import hashlib
+import importlib.util
 import json
+import os
 import re
 import shutil
+import time
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
@@ -31,6 +34,7 @@ class JobService:
         commit=None,
         recover=True,
         call_status=None,
+        blender=None,
     ):
         self.root = Path(root).resolve()
         self.root.mkdir(parents=True, exist_ok=True)
@@ -40,6 +44,7 @@ class JobService:
         self.refresh = refresh or (lambda: None)
         self.commit = commit or (lambda: None)
         self.call_status = call_status
+        self.blender = blender or os.environ.get("BLENDER_BIN", "blender")
         self.lock = RLock()
         self.executor = ThreadPoolExecutor(max_workers=1) if dispatcher is None else None
         if recover:
@@ -54,6 +59,12 @@ class JobService:
 
     def __enter__(self):
         return self
+
+    def repair_tools(self):
+        return {
+            "meshlib": importlib.util.find_spec("meshlib") is not None,
+            "blender": shutil.which(self.blender) is not None,
+        }
 
     def __exit__(self, *args):
         if self.executor:
@@ -76,6 +87,18 @@ class JobService:
         if owner is not None and job.get("owner", "local") != owner:
             raise KeyError("Unknown job")
         dispatch = self.folder(job_id) / "dispatch.json"
+        if self.call_status and not dispatch.is_file() and self._dispatch_expired(job):
+            # Recheck the shared volume: a worker may have started since the
+            # request's first snapshot, even if dispatch metadata was lost.
+            self.refresh()
+            job = self._read_job(job_id)
+            if not dispatch.is_file() and self._dispatch_expired(job):
+                job.update(
+                    status="interrupted",
+                    can_retry_repair=(self.folder(job_id) / "raw.ply").is_file(),
+                    error="Der Cloud-Auftrag konnte nicht fortgesetzt werden. Bitte erneut starten.",
+                )
+                self._save(job)
         if self.call_status and job["status"] not in TERMINAL and dispatch.is_file():
             call_id = json.loads(dispatch.read_text(encoding="utf-8"))["call_id"]
             state = self.call_status(call_id)
@@ -92,6 +115,16 @@ class JobService:
                     )
                     self._save(job)
         return job
+
+    @staticmethod
+    def _dispatch_expired(job):
+        if job["status"] in TERMINAL:
+            return False
+        timestamp = job.get("updated_at", job["created_at"])
+        age = (datetime.now(UTC) - datetime.fromisoformat(timestamp)).total_seconds()
+        # Missing dispatch metadata gets a bounded grace period. Active workers
+        # have the full Modal execution timeout plus five minutes to commit.
+        return age > (600 if job["status"] == "queued" else 3900)
 
     def list(self, owner="local"):
         jobs = [self.get(file.parent.name) for file in self.root.glob("*/job.json")]
@@ -142,7 +175,14 @@ class JobService:
                 "review_required": True,
                 "artifacts": {},
                 "can_retry_repair": bool(retry_from),
+                "source_job_id": retry_from,
             }
+            if retry_from:
+                original = self.get(retry_from, owner)
+                job["name"] = original["name"]
+                job["generation"] = original.get("generation")
+                with (folder / "raw.ply").open("rb") as stream:
+                    job["raw_sha256"] = hashlib.file_digest(stream, "sha256").hexdigest()
             self._save(job)
             if self.dispatcher:
                 try:
@@ -182,6 +222,8 @@ class JobService:
 
     def run_one(self, job_id):
         job = self.get(job_id)
+        if job["status"] in TERMINAL:
+            return
         folder = self.folder(job_id)
         raw = folder / "raw.ply"
         try:
@@ -201,7 +243,14 @@ class JobService:
                     self._update(job_id, can_retry_repair=True)
                 self.commit()
             self._update(job_id, status="repairing")
-            result = prepare_model(raw, folder / "print", PrintSettings(**job["settings"]))
+            with raw.open("rb") as stream:
+                raw_sha256 = hashlib.file_digest(stream, "sha256").hexdigest()
+            self._update(job_id, raw_sha256=raw_sha256)
+            started = time.perf_counter()
+            result = prepare_model(
+                raw, folder / "print", PrintSettings(**job["settings"]), blender=self.blender
+            )
+            repair_seconds = time.perf_counter() - started
             mesh = trimesh.load_mesh(folder / "print/model.stl")
             # Center the preview only; print units and placement stay unchanged.
             mesh.apply_translation(-mesh.bounds.mean(axis=0))
@@ -221,6 +270,8 @@ class JobService:
                 geometry=result["geometry"],
                 review_reasons=result["review_reasons"],
                 surface_deviation=result["surface_deviation"],
+                raw_sha256=raw_sha256,
+                repair_seconds=round(repair_seconds, 3),
                 artifacts={name: f"/api/jobs/{job_id}/files/{name}" for name in ARTIFACTS},
             )
         except Exception as error:
