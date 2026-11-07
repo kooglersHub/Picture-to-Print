@@ -16,7 +16,14 @@ from pathlib import Path
 import numpy as np
 import trimesh
 
-from .geometry import describe, load_geometry, remove_enclosed_shells, surface_deviation, write_3mf
+from .geometry import (
+    describe,
+    load_geometry,
+    orient_closed_components,
+    remove_enclosed_shells,
+    surface_deviation,
+    write_3mf,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -206,6 +213,7 @@ def prepare_model(source: Path, output: Path, settings: PrintSettings, blender="
             removed_after = 0
             if settings.backend == "blender":
                 mesh, removed_after = remove_enclosed_shells(mesh)
+            repair["faces_reoriented"] = orient_closed_components(mesh)
             logger.info(
                 "Removed %d enclosed shells in total; measuring surface change",
                 removed_before + removed_after + repair.get("enclosed_shells_removed", 0),
